@@ -84,12 +84,27 @@ for (zz in 1:length(directories)){
 # TrialSpecificManipulations ----------------------------------------------
 
 CombinedInfo<-AllFoldersList[[1]]#pull dataframe corresponding to particular day/trial
-CombinedInfo<-CombinedInfo[c(1:(10*floor(nrow(CombinedInfo)/10))),] #makes nrow divisible by 10 for subsampling purposes
+#CombinedInfo<-CombinedInfo[c(1:(10*floor(nrow(CombinedInfo)/10))),] #makes nrow divisible by 10 for subsampling purposes
 #CombinedInfo.sub<-cbind(0.1*CombinedInfo[seq(1,length(CombinedInfo$position),10),1],
 #                        apply(CombinedInfo[,c(2:21)],2,function(x) colMeans(matrix(x, nrow=10)))) #
 # colnames(CombinedInfo.sub)[1]<-"position"
 # CombinedInfo.sub<-as.data.frame(CombinedInfo.sub)
 # summary(CombinedInfo.sub)
+
+
+
+BASE<-matrix(summary(CombinedInfo),nrow=7)
+colnames(BASE)<-colnames(CombinedInfo)
+
+
+
+
+
+
+
+
+
+
 
 
 library(trajr)
