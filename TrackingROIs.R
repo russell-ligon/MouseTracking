@@ -13,83 +13,99 @@ library(MASS)
 setwd(dir<-"C:/Users/Rusty/Amazon Drive/MICE/IR")#sets working directory (setwd), and new variable (dir) corresponding to parent directory
 
 
-directories<-list.dirs(dir)#list.dirs lists directories 
+directories<-list.dirs(dir,recursive = TRUE)#list.dirs lists directories 
 directories<-directories[-1]#removes "self" directory
 
 
 
+
+# CreateCompositeList -----------------------------------------------------
 #Loops through each folder in 'directories'
 # pulls files corresponding to tracking informaiton (location.names)
 # and ROI information (Roifiles)
 # then names the information from these files and amalgamates into a data.frame called CombinedInfo
 # then puts that dataframe into the list AllFoldersList at position zz
 
-
 AllFoldersList<-list() #Creates empty list which will get filled iteratively with loop
 AssociatingDistance.pixels<-100 # Define pixel-distance that corresponding to an 'association'
-
+flag<-1 #sets flag, which will only increase when looping through folders containing the "correct" kind of data
 for (zz in 1:length(directories)){
   FolderInfo<-directories[zz]#pull full 
-  FolderInfo<-strsplit(FolderInfo,"/")[[1]][length(strsplit(FolderInfo,"/")[[1]])]
-  location.names<-list.files(directories[zz],full.names=TRUE,pattern=".csv")#change pattern to only pull location csvs
-  Roifiles<-list.files(directories[zz],full.names = TRUE,pattern="position")#refine to pull roi csvs
-  inds<-length(location.names)
   
-  for(Caleb in 1:inds){
-    Location<-read.csv(location.names[Caleb])
-    colnames(Location)[2:3]<-paste(colnames(Location)[2:3],".A",Caleb,sep='')
-    Location[,3]<-(Location[,3]-1080)*(-1)
-   
-    if(Caleb>1){
-      CombinedInfo<-merge(CombinedInfo,Location,by="position")
-    } else {
-      CombinedInfo<-Location
+  FolderInfo<-strsplit(FolderInfo,"/")[[1]][length(strsplit(FolderInfo,"/")[[1]])]
+  location.names<-list.files(directories[zz],full.names=TRUE,pattern="fixed.csv")#change pattern to only pull location csvs
+  
+  if(length(location.names)>0){ #Only if in the right kind of folder, i.e. containing ...fixed.csv files, run the rest, otherwise, skip
+  
+    Roifiles<-list.files(directories[zz],full.names = TRUE,pattern="-region")#refine to pull roi csvs
+    Roifilenames<-list.files(directories[zz],full.names = FALSE,pattern="-region")#refine to pull roi csvs
+    inds<-length(location.names)
+    
+    for(Caleb in 1:inds){
+      Location<-read.csv(location.names[Caleb])
+      colnames(Location)[2:3]<-paste(colnames(Location)[2:3],".A",Caleb,sep='')
+      Location[,3]<-(Location[,3]-1080)*(-1)
+     
+      if(Caleb>1){
+        CombinedInfo<-merge(CombinedInfo,Location,by="position")
+      } else {
+        CombinedInfo<-Location
+      }
+      
+    }
+    CombinedInfo<-round(CombinedInfo)
+    CombinedInfo<-pairwise.Distances(CombinedInfo,inds)#Custom function located in MouseFunctions.R
+    CombinedInfo<-Associate.Identifier(CombinedInfo,AssociatingDistance.pixels)#Custom function located in MouseFunctions.R
+    
+    for(Caitlin in 1:length(Roifiles)){
+      ROI<-read.csv(Roifiles[Caitlin])
+      roiname<-Roifilenames[Caitlin]
+      colnames(ROI)[2]<-roiname
+      CombinedInfo<-merge(CombinedInfo,ROI, by="position")
     }
     
+    
+    AllFoldersList[[flag]]<-CombinedInfo #puts CombinedInfo dataframe into AllFoldersList at position zz
+    names(AllFoldersList)[[flag]]<-FolderInfo #applies name of folder to list element
+    flag<-flag+1
   }
-  
-  # for(Caitlin in 1:length(Roifiles)){
-  #   ROI<-read.csv(Roifiles[Caitlin])
-  #   roiname<-Roifiles[Caitlin]
-  #   colnames(ROI)[2]<-roiname
-  #   CombinedInfo<-merge(CombinedInfo,ROI, by="position")
-  # }
-  
-  CombinedInfo<-round(CombinedInfo)
-  CombinedInfo<-pairwise.Distances(CombinedInfo,inds)#Custom function located in MouseFunctions.R
-  CombinedInfo<-Associate.Identifier(CombinedInfo,AssociatingDistance.pixels)#Custom function located in MouseFunctions.R
-  
-  
-  AllFoldersList[[zz]]<-CombinedInfo #puts CombinedInfo dataframe into AllFoldersList at position zz
-  names(AllFoldersList)[[zz]]<-FolderInfo #applies name of folder to list element
 }  
 
 
-CombinedInfo<-AllFoldersList[[1]]
-CombinedInfo<-CombinedInfo[c(1:(10*floor(nrow(CombinedInfo)/10))),] #makes nrow divisible by 10 for subsampling purposes
-#CombinedInfo.sub<-apply(CombinedInfo[,c(2:15)],2,function(x) colMeans(matrix(x, nrow=10)))
-CombinedInfo.sub<-cbind(0.1*CombinedInfo[seq(1,length(CombinedInfo$position),10),1],
-                        apply(CombinedInfo[,c(2:21)],2,function(x) colMeans(matrix(x, nrow=10)))) #
 
-colnames(CombinedInfo.sub)[1]<-"position"
-CombinedInfo.sub<-as.data.frame(CombinedInfo.sub)
-summary(CombinedInfo.sub)
+
+
+
+
+
+
+
+
+# TrialSpecificManipulations ----------------------------------------------
+
+CombinedInfo<-AllFoldersList[[1]]#pull dataframe corresponding to particular day/trial
+CombinedInfo<-CombinedInfo[c(1:(10*floor(nrow(CombinedInfo)/10))),] #makes nrow divisible by 10 for subsampling purposes
+#CombinedInfo.sub<-cbind(0.1*CombinedInfo[seq(1,length(CombinedInfo$position),10),1],
+#                        apply(CombinedInfo[,c(2:21)],2,function(x) colMeans(matrix(x, nrow=10)))) #
+# colnames(CombinedInfo.sub)[1]<-"position"
+# CombinedInfo.sub<-as.data.frame(CombinedInfo.sub)
+# summary(CombinedInfo.sub)
 
 
 library(trajr)
 
-A1trj <- TrajFromCoords(CombinedInfo.sub[,c(2,3,1)],fps=1)
-A2trj <- TrajFromCoords(CombinedInfo.sub[,c(4,5,1)],fps=1)
-A3trj <- TrajFromCoords(CombinedInfo.sub[,c(6,7,1)],fps=1)
-A4trj <- TrajFromCoords(CombinedInfo.sub[,c(8,9,1)],fps=1)
+A1trj <- TrajFromCoords(CombinedInfo[,c(2,3,1)],fps=10)
+A2trj <- TrajFromCoords(CombinedInfo[,c(4,5,1)],fps=10)
+A3trj <- TrajFromCoords(CombinedInfo[,c(6,7,1)],fps=10)
+A4trj <- TrajFromCoords(CombinedInfo[,c(8,9,1)],fps=10)
 
 
 All.arenas<-list(A1trj,A2trj,A3trj,A4trj)
 
 # Calculate all stats for trajectories in the list
 # which was built in the previous example
-stats <- TrajsMergeStats(All.arenas, characteriseTrajectory)
-print(stats)
+##stats <- TrajsMergeStats(All.arenas, characteriseTrajectory) #currently this command/function is not optimized and takes too long (>5 hours)
+#print(stats)
 beepr::beep(4)
 
 
@@ -99,7 +115,7 @@ beepr::beep(4)
 
 # Calculate speed and acceleration
 derivs <- TrajDerivatives(A1trj)
-derivs <- TrajDerivatives(A1trj.sub)
+
 
 
 
