@@ -54,7 +54,10 @@ for (zz in 1:length(directories)){
       }
       
     }
-    CombinedInfo<-round(CombinedInfo)
+    
+    
+    #CombinedInfo[,c(2:ncol(CombinedInfo))]<-CombinedInfo[,c(2:ncol(CombinedInfo))]/(pix.cm)
+    #CombinedInfo<-round(CombinedInfo)
     CombinedInfo<-pairwise.Distances(CombinedInfo,inds)#Custom function located in MouseFunctions.R
     ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
     dister<-(inds*2+2)
@@ -118,13 +121,24 @@ for(g in 1:length(check)){
 
 library(trajr)
 
-A1trj <- TrajFromCoords(CombinedInfo[,c(2,3,1)],fps=10)
+A1trj <- TrajFromCoords(CombinedInfo[,c(2,3,1)],fps=10);
 A2trj <- TrajFromCoords(CombinedInfo[,c(4,5,1)],fps=10)
 A3trj <- TrajFromCoords(CombinedInfo[,c(6,7,1)],fps=10)
 A4trj <- TrajFromCoords(CombinedInfo[,c(8,9,1)],fps=10)
 
-
 All.arenas<-list(A1trj,A2trj,A3trj,A4trj)
+
+for(tjmax in 1:length(All.arenas)){
+  sp.Traj<-All.arenas[[tjmax]]
+  print(paste("Trajectory length ",TrajLength(sp.Traj)/100/1000/pix.cm))
+  sp.Traj$displaceDist<-c(0,Mod(diff(sp.Traj$polar[0:nrow(sp.Traj)])))
+  sorted.displace<-sp.Traj[order(-sp.Traj$displaceDist),]
+}
+
+ch<-c(NA,TrajAngles(sp.Traj,compass.direction = 0))
+
+
+
 
 # Calculate all stats for trajectories in the list
 # which was built in the previous example
