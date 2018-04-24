@@ -244,3 +244,28 @@ lines(y0.A3~x0.A3,data=CombinedInfo,ylim=c(0,1080),xlim=c(0,1400),col=add.alpha(
 lines(y0.A4~x0.A4,data=CombinedInfo,ylim=c(0,1080),xlim=c(0,1400),col=add.alpha("darkgreen",0.2))
 
 
+
+
+zcol  = cut(a1heat$z, nbcol)
+persp3d(x=a1heat$x,y=a1heat$y,
+        z = a1heat$z, theta = 120,col=color[zcol],ylim=c(0,1080),xlim=c(0,1400),
+        zlab="Time spent",
+        xlab="Horizontal coordinates",ylab="Vertical coordinates",main="Activity patterns")
+zcol  = cut(a2heat$z, nbcol)
+
+persp3d(x=a2heat$x,y=a2heat$y,
+        z = a2heat$z, theta = 120,col=color[zcol],ylim=c(0,1080),xlim=c(0,1400),
+        zlab="Time spent",
+        xlab="Horizontal coordinates",ylab="Vertical coordinates",main="Activity patterns", add=TRUE) 
+zcol  = cut(a3heat$z, nbcol)
+
+persp3d(x=a3heat$x,y=a3heat$y,
+        z = a3heat$z, theta = 120,col=color[zcol],ylim=c(0,1080),xlim=c(0,1400),
+        zlab="Time spent",
+        xlab="Horizontal coordinates",ylab="Vertical coordinates",main="Activity patterns", add=TRUE) 
+zcol  = cut(a4heat$z, nbcol)
+
+persp3d(x=a4heat$x,y=a4heat$y,
+        z = a4heat$z, theta = 120,col=color[zcol],ylim=c(0,1080),xlim=c(0,1400),
+        zlab="Time spent",
+        xlab="Horizontal coordinates",ylab="Vertical coordinates",main="Activity patterns", add=TRUE) 
