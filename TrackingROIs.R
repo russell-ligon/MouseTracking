@@ -31,9 +31,9 @@ pix.cm<-4.2924
 AssociatingDistance.cm<-10 # Define cm distance that corresponding to an 'association'
 flag<-1 #sets flag, which will only increase when looping through folders containing the "correct" kind of data
 for (zz in 1:length(directories)){
-  FolderInfo<-directories[zz]#pull full 
-  
-  FolderInfo<-strsplit(FolderInfo,"/")[[1]][length(strsplit(FolderInfo,"/")[[1]])]
+  FolderInfo1<-directories[zz]#pull full 
+  FolderInfo<-strsplit(FolderInfo1,"/")[[1]][length(strsplit(FolderInfo1,"/")[[1]])]
+  FolderInfo<-paste(strsplit(FolderInfo1,"/")[[1]][(length(strsplit(FolderInfo1,"/")[[1]])-1)],FolderInfo,sep='.')
   location.names<-list.files(directories[zz],full.names=TRUE,pattern="fixed.csv")#change pattern to only pull location csvs
   
   if(length(location.names)>0){ #Only if in the right kind of folder, i.e. containing ...fixed.csv files, run the rest, otherwise, skip
@@ -104,8 +104,15 @@ colnames(BASE)<-colnames(CombinedInfo)
 
 library(plyr)
 check<-apply(CombinedInfo[,c(22:25)],2,function(x) plyr::count(x))
-
-
+for(g in 1:length(check)){
+  j<-check[[g]]
+  colnames(j)[2]<-names(check)[g]
+  if(g>1){
+    boop<-cbind(boop,j)
+  } else {
+    boop<-j
+  }
+}
 
 
 
