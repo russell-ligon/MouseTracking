@@ -27,7 +27,8 @@ directories<-directories[-1]#removes "self" directory
 # then puts that dataframe into the list AllFoldersList at position zz
 
 AllFoldersList<-list() #Creates empty list which will get filled iteratively with loop
-AssociatingDistance.pixels<-100 # Define pixel-distance that corresponding to an 'association'
+pix.cm<-4.2924
+AssociatingDistance.cm<-10 # Define cm distance that corresponding to an 'association'
 flag<-1 #sets flag, which will only increase when looping through folders containing the "correct" kind of data
 for (zz in 1:length(directories)){
   FolderInfo<-directories[zz]#pull full 
@@ -55,7 +56,10 @@ for (zz in 1:length(directories)){
     }
     CombinedInfo<-round(CombinedInfo)
     CombinedInfo<-pairwise.Distances(CombinedInfo,inds)#Custom function located in MouseFunctions.R
-    CombinedInfo<-Associate.Identifier(CombinedInfo,AssociatingDistance.pixels)#Custom function located in MouseFunctions.R
+    ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
+    dister<-(inds*2+2)
+    CombinedInfo[,c(dister:(dister+ncomparisons-1))]<-(CombinedInfo[,c(dister:(dister+ncomparisons-1))])/(pix.cm)
+    CombinedInfo<-Associate.Identifier(CombinedInfo,AssociatingDistance.cm)#Custom function located in MouseFunctions.R
     
     for(Caitlin in 1:length(Roifiles)){
       ROI<-read.csv(Roifiles[Caitlin])
@@ -98,10 +102,8 @@ colnames(BASE)<-colnames(CombinedInfo)
 
 
 
-
-
-
-
+library(plyr)
+check<-apply(CombinedInfo[,c(22:25)],2,function(x) plyr::count(x))
 
 
 
