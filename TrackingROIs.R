@@ -12,6 +12,8 @@ library(MASS)
 
 setwd(dir<-"C:/Users/Rusty/Amazon Drive/MICE/IR")#sets working directory (setwd), and new variable (dir) corresponding to parent directory
 
+MetaData<-read.csv("master_summary.csv")
+
 
 directories<-list.dirs(dir,recursive = TRUE)#list.dirs lists directories 
 directories<-directories[-1]#removes "self" directory
@@ -118,6 +120,10 @@ for(g in 1:length(check)){
 }
 
 
+#Creates large, mouse-to-mouse dataset at each step ()
+Huge<-Mouse2Mouse(CombinedInfo[,c(2:9)],n.inds=4,interval.of.frames=0.1)
+
+
 
 library(trajr)
 
@@ -130,14 +136,21 @@ All.arenas<-list(A1trj,A2trj,A3trj,A4trj)
 
 for(tjmax in 1:length(All.arenas)){
   sp.Traj<-All.arenas[[tjmax]]
+  print(TrajLength(sp.Traj))
   print(paste("Trajectory length ",TrajLength(sp.Traj)/100/1000/pix.cm))
   sp.Traj$displaceDist<-c(0,Mod(diff(sp.Traj$polar[0:nrow(sp.Traj)])))
+  #sp.Traj$A1.A2<-Arg(trj$displacement[2:nrow(trj)]) - compass.direction
   sorted.displace<-sp.Traj[order(-sp.Traj$displaceDist),]
 }
 
 ch<-c(NA,TrajAngles(sp.Traj,compass.direction = 0))
 
 
+angles <- Arg(trj$displacement[2:nrow(trj)]) - compass.direction
+
+
+
+corr <- TrajDirectionAutocorrelations(sp.Traj,deltaSMax = round(nrow(sp.Traj)/10))
 
 
 # Calculate all stats for trajectories in the list

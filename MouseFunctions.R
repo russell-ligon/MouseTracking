@@ -1,12 +1,95 @@
 
 
 
+library(gdata)
 
+# Mouse2MouseTrajectories -------------------------------------------------
 
-
-
-
-
+Mouse2Mouse<-function(xyvalues.allpairs,n.inds=4,interval.of.frames=0.1){ 
+  #xyvalues.allpairs = subset of full dataframe containing original all x,y coordinates for all
+  # n.inds = number of individual mice
+ # interval.of.frames used for calculating velocity towards one another (0.1 = 10fps)
+  
+  ncomparisons<-2*(n.inds-1)
+  flag<-1
+  
+    for(d in 1:n.inds){ #Loops through all individuals, to compare trajectory relative to others location
+     
+      a1<-(d-1)*2+1
+      b1<-a1+1
+      Z1=xyvalues.allpairs[,a1]+1i*xyvalues.allpairs[,b1] #Pulls locations for first individual
+      RealZ <-zoo(Z1)
+      #Location Vector 
+      Z1=as.data.frame(RealZ)
+      
+        for(e in 1:inds){  #Loops through all others
+  
+          a2<-(e-1)*2+1
+          b2<-a2+1
+          
+          
+          comparisonheader<-paste(gsub("x0.","",colnames(xyvalues.allpairs)[a1]),
+                                  gsub("x0.","",colnames(xyvalues.allpairs)[a2]),sep=':')
+          
+          
+          Z2=xyvalues.allpairs[,a2]+1i*xyvalues.allpairs[,b2] #Pulls locations for first individual
+          RealZ2 <-zoo(Z2)
+          #Location Vector 
+          Z2=as.data.frame(RealZ2)
+          
+  
+          interleaveddata<-matrix(rbind(t(Z1), t(Z2)), ncol=1, byrow=TRUE)
+          
+          # step vectors
+          dZ <- diff(interleaveddata)
+          
+          # orientation of each step
+          Phi <- Arg(dZ)
+          
+          # turning angles
+          Theta <- diff(Phi)
+          
+          #Step lengths
+          S <- Mod(dZ)
+          
+          # time intervals
+          #dT <- diff(Time1)
+          
+          # Magnitude of linear velocity between points
+          V <- S/interval.of.frames
+          
+          #From Almelda et al. 2010, Indices of movement behaviour: conceptual background, effects of scale and location errors.
+          # "The Straightness or linearity index, ST, (BATSCHELET 1981), 
+          # is simply the net displacement distance (the Euclidian distance 
+          # between the start and the final point), divided by the total length of the movement."
+          
+          #BATSCHELET, E. 1981. Circular Statistics in Biology. London, Academic Press.
+          
+          M2Mcomparison<-cbind(dZ,Phi,c(0,Theta),S,V)
+          colnames(M2Mcomparison)<-paste(comparisonheader,c("StepVector","Orientation","TurningAngle","StepLength","Velocity"),sep='_')
+          M2Mcomparison<-M2Mcomparison[seq(1,nrow(M2Mcomparison),2),]
+          
+          
+          #############################
+          # TotDistance<-sum(S) #Sum of step lengths
+          # AvgSpeed<-mean(V)   #Mean of velocities
+          # MaxSpeed<-max(V)    #Maximum velocity
+          # StraightnessIndex<-(StrtStop/TotDistance) #Ranges from 0-1 (with 1 being a straight line)
+          # AvgOrientation<-mean(Phi)
+          # AvgTurn<-mean(Theta)
+          
+          
+          if(flag>1){
+            allcomparisons<-cbind(allcomparisons,M2Mcomparison)
+          } else {
+            allcomparisons<-M2Mcomparison
+          }
+          flag<-flag+1
+        }  
+      
+    }
+  return(allcomparisons)
+}
 
 
 
