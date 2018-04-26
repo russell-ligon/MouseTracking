@@ -30,6 +30,8 @@ directories<-directories[-1]#removes "self" directory
 
 AllFoldersList<-list() #Creates empty list which will get filled iteratively with loop
 pix.cm<-4.2924
+
+
 AssociatingDistance.cm<-10 # Define cm distance that corresponding to an 'association'
 flag<-1 #sets flag, which will only increase when looping through folders containing the "correct" kind of data
 for (zz in 1:length(directories)){
@@ -92,7 +94,7 @@ for (zz in 1:length(directories)){
 
 # TrialSpecificManipulations ----------------------------------------------
 
-CombinedInfo<-AllFoldersList[[1]]#pull dataframe corresponding to particular day/trial
+CombinedInfo<-AllFoldersList$T002.D2#pull dataframe corresponding to particular day/trial
 #CombinedInfo<-CombinedInfo[c(1:(10*floor(nrow(CombinedInfo)/10))),] #makes nrow divisible by 10 for subsampling purposes
 #CombinedInfo.sub<-cbind(0.1*CombinedInfo[seq(1,length(CombinedInfo$position),10),1],
 #                        apply(CombinedInfo[,c(2:21)],2,function(x) colMeans(matrix(x, nrow=10)))) #
@@ -121,13 +123,20 @@ for(g in 1:length(check)){
 
 
 #Creates large, mouse-to-mouse dataset at each step ()
-Huge<-Mouse2Mouse(CombinedInfo[,c(2:9)],n.inds=4,interval.of.frames=0.1)
+pdf("MouseAngles.pdf",width= 8, height= 8,family="NimbusRom")
+par(mfrow=c(4,4))# rows, columns
+MouseAngles<-Mouse2Mouse(CombinedInfo[,c(2:9)],pairwisedistances=CombinedInfo[,c(10:15)],n.inds=4,interval.of.frames=0.1,shrinksize=.85)
+dev.off()
+
+Big<-cbind(CombinedInfo[-1,],MouseAngles)
+
+behaviors<-BehaviorCategorizer(Big,approach.angle=40,leave.angle=90,integratesteps=10,n.inds=4,walk.speed=10,stationary.noise=.5)
 
 
 
 library(trajr)
 
-A1trj <- TrajFromCoords(CombinedInfo[,c(2,3,1)],fps=10);
+A1trj <- TrajFromCoords(CombinedInfo[,c(2,3,1)],fps=10)
 A2trj <- TrajFromCoords(CombinedInfo[,c(4,5,1)],fps=10)
 A3trj <- TrajFromCoords(CombinedInfo[,c(6,7,1)],fps=10)
 A4trj <- TrajFromCoords(CombinedInfo[,c(8,9,1)],fps=10)
@@ -136,11 +145,17 @@ All.arenas<-list(A1trj,A2trj,A3trj,A4trj)
 
 for(tjmax in 1:length(All.arenas)){
   sp.Traj<-All.arenas[[tjmax]]
+  test<-sp.Traj[c(1:1000),]
   print(TrajLength(sp.Traj))
   print(paste("Trajectory length ",TrajLength(sp.Traj)/100/1000/pix.cm))
   sp.Traj$displaceDist<-c(0,Mod(diff(sp.Traj$polar[0:nrow(sp.Traj)])))
   #sp.Traj$A1.A2<-Arg(trj$displacement[2:nrow(trj)]) - compass.direction
   sorted.displace<-sp.Traj[order(-sp.Traj$displaceDist),]
+  
+  plot(test$displacement, asp = 1, type = "n")
+  arrows(rep(0, length(test$displacement)), rep(0, length(test$displacement)), 
+         Re(test$displacement), Im(test$displacement), col = rgb(0,0, 0, 0.25), lwd = 2, length = 0.1)
+  
 }
 
 ch<-c(NA,TrajAngles(sp.Traj,compass.direction = 0))
