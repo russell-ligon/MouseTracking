@@ -2,28 +2,146 @@
 
 
 library(gdata)
+library(zoo)
+library(circular)
+
+
+
+
+
+
+# BehaviorCategorizer -----------------------------------------------------
+#Big =
+# approach.angle = acceptable width of angle for approaching another mouse
+# leave.angle = acceptable width of angle for leaving another mouse
+# integratesteps = n of frames over which to calculate rolling averages for angles and delta pairwise distances for calculating approaching/leaving
+# walk.speed = cm/sec threshold, above which = running
+
+
+BehaviorCategorizer<-function(Big,approach.angle=90,leave.angle=90,integratesteps=10,n.inds=4,walk.speed=10,stationary.noise=.5){
+  orderedcomparisons<-2*(n.inds-1)*2
+  OrderedMicePairs<-colnames(Big)[grep(":",colnames(Big))]
+  BigSub<-Big[,c(grep(":",colnames(Big)),grep("Delta",colnames(Big)))]
+  Bog<-rollapply(BigSub,width=integratesteps,mean,na.rm=TRUE,partial=TRUE,align="left")
+  MouseDisp<-Big[,grep("step",colnames(Big))]
+  RunMouse<-rollapply(MouseDisp,width=integratesteps,sum,na.rm=TRUE,partial=TRUE,align="left")
+    
+  #left alignment means that the locations we identify for behaviors (e.g. approaches)
+  # will corespond to the 'start' of the behavior
+  
+  
+  movingbehavior<-apply(RunMouse,2,function(x) ifelse(x<stationary.noise,"stationary",
+                                                      ifelse(x>walk.speed,"running","walking")))
+  colnames(movingbehavior)<-gsub("step","movement",colnames(movingbehavior))
+  
+  #Approaching classifier
+  top.angle<-approach.angle/2
+  bottom.angle<-(approach.angle/2)*-1
+  ApproachAngleClassifier<-function(angles){
+    angleapproach<-ifelse(angles>bottom.angle & angles<top.angle,1,0)
+  }
+  
+  #Leaving classifier
+  Ltop.angle<-180-(leave.angle/2)
+  Lbottom.angle<-(-180)+(leave.angle/2)
+  LeaveAngleClassifier<-function(angles){
+    anglealeave<-ifelse(angles>Ltop.angle | angles<Lbottom.angle,1,0)
+  }
+  
+  Approaching<-apply(Bog[,c(grep(":",colnames(Bog)))],2,ApproachAngleClassifier)
+  colnames(Approaching)<-gsub("-angle","pointedtoward",colnames(Approaching))
+  Leaving<-apply(Bog[,c(grep(":",colnames(Bog)))],2,LeaveAngleClassifier)
+  colnames(Leaving)<-gsub("-angle","pointedaway",colnames(Leaving))
+  
+  socialmovements<-cbind(Approaching, Leaving,Bog[,c(grep(":",colnames(Bog)))],Bog[,c(grep("Delta",colnames(Bog)))])
+  
+  
+  oc<-strsplit(OrderedMicePairs,"-")
+  oc2<-lapply(oc,function(x) strsplit(x[1],":"))
+  oc3<-lapply(oc2,function(x) unlist(x))
+  
+  
+  for(rory in 1:orderedcomparisons){
+    plusr<-rory+orderedcomparisons
+    
+    approachingthismouse<-ifelse(socialmovements[,rory]==1 & socialmovements[,c(grepl(oc3[[rory]][1],colnames(socialmovements))&grepl(oc3[[rory]][2],colnames(socialmovements))&grepl("Delta",colnames(socialmovements)))]<0,1,0)
+    approachingthismouse<-as.data.frame(approachingthismouse,ncol=1)
+    colnames(approachingthismouse)<-  gsub(":",".app.",gsub("-angle","",OrderedMicePairs))[rory]
+
+    
+    if(rory<2){
+      approachingbehavior<-approachingthismouse
+    } else {
+      approachingbehavior<-cbind(approachingbehavior,approachingthismouse)
+    }
+ 
+    leavingthismouse<-ifelse(socialmovements[,plusr]==1 & socialmovements[,c(grepl(oc3[[rory]][1],colnames(socialmovements))&grepl(oc3[[rory]][2],colnames(socialmovements))&grepl("Delta",colnames(socialmovements)))]>0,1,0)
+    leavingthismouse<-as.data.frame(leavingthismouse,ncol=1)
+    colnames(leavingthismouse)<-  gsub(":",".lvs.",gsub("-angle","",OrderedMicePairs))[rory]
+
+    if(rory<2){
+      leavingbehavior<-leavingthismouse
+    } else {
+      leavingbehavior<-cbind(leavingbehavior,leavingthismouse)
+    }
+  }
+  
+  oknow<-cbind(movingbehavior,approachingbehavior,leavingbehavior)
+  
+  return(oknow)
+}
+
+
+
+
 
 # Mouse2MouseTrajectories -------------------------------------------------
-
-Mouse2Mouse<-function(xyvalues.allpairs,n.inds=4,interval.of.frames=0.1){ 
+# Function that takes two columns, per individual, of x/y coordinates
+# (e.g. 4 individuals, n.inds=4, should correspond to 8 columns (xyvalues.allpairs))
+# Returns pairwise distances, orientations at each time point (i.e. whether a mouse is moving towards another) and velocities
+Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,interval.of.frames=0.1,shrinksize=.75){ 
   #xyvalues.allpairs = subset of full dataframe containing original all x,y coordinates for all
   # n.inds = number of individual mice
  # interval.of.frames used for calculating velocity towards one another (0.1 = 10fps)
   
   ncomparisons<-2*(n.inds-1)
   flag<-1
-  
+  colorlist<-c("gray","blue","red","green")
+
     for(d in 1:n.inds){ #Loops through all individuals, to compare trajectory relative to others location
      
+      
+      
       a1<-(d-1)*2+1
       b1<-a1+1
       Z1=xyvalues.allpairs[,a1]+1i*xyvalues.allpairs[,b1] #Pulls locations for first individual
-      RealZ <-zoo(Z1)
-      #Location Vector 
-      Z1=as.data.frame(RealZ)
+      # RealZ <-zoo(Z1)
+      # #Location Vector 
+      # Z1<-(RealZ)
+      
+      # step vectors
+      dZ1 <- (diff(Z1))
+      # orientation of each step
+      distanctrav<-Mod(dZ1)/pix.cm
+      Z1.Phi <- Arg(dZ1)
+      Compass.D.M1<-(90 - (Arg(dZ1) * 180)/pi)
+      Compass.D.M1<-ifelse(Compass.D.M1>0,Compass.D.M1,(360+(Compass.D.M1)))
+        
+      
+      circle.Compass.D.M1<-circular(Compass.D.M1, type = "angles",
+               units = "degrees",
+               template = "geographics",#c("none", "geographics", "clock12", "clock24"),
+               #modulo = c("asis", "2pi", "pi"),
+               zero = 0) #rotation = c("counter", "clock"), names)
+      
+     nom1<-gsub("x0.","",colnames(xyvalues.allpairs)[a1])
+     rose.diag(circle.Compass.D.M1, bins = 16, col = colorlist[d], prop = 2, shrink=shrinksize,
+                main = nom1,rotation="clock")
+
       
         for(e in 1:inds){  #Loops through all others
-  
+          if(d!=e){
+          
           a2<-(e-1)*2+1
           b2<-a2+1
           
@@ -33,30 +151,61 @@ Mouse2Mouse<-function(xyvalues.allpairs,n.inds=4,interval.of.frames=0.1){
           
           
           Z2=xyvalues.allpairs[,a2]+1i*xyvalues.allpairs[,b2] #Pulls locations for first individual
-          RealZ2 <-zoo(Z2)
-          #Location Vector 
-          Z2=as.data.frame(RealZ2)
-          
-  
+ 
+          #interleave movement and difference vectors
           interleaveddata<-matrix(rbind(t(Z1), t(Z2)), ncol=1, byrow=TRUE)
           
           # step vectors
-          dZ <- diff(interleaveddata)
+          dZ.1.2 <- diff(interleaveddata)#Calculates distance between 1 & 2
           
           # orientation of each step
-          Phi <- Arg(dZ)
+          Z1Z2.Phi <- Arg(dZ.1.2)#orientation of vector connecting mouse 1 and mouse 2
+          Z1Z2.Phi <- Z1Z2.Phi[seq(1,nrow(Z1Z2.Phi),2),]
+          Z1Z2.Phi <- Z1Z2.Phi[c(1:(length(Z1Z2.Phi)-1))]
           
-          # turning angles
-          Theta <- diff(Phi)
+          Compass.D.M1toM2<-(90 - (Z1Z2.Phi * 180)/pi)#Calculates orientation between M1 and M2, in angles
+      
+          AngularDifference<-atan2(sin(Z1Z2.Phi-Z1.Phi), cos(Z1Z2.Phi-Z1.Phi))
+          DiffCompass.D.M1toM2<-(90 - ((AngularDifference) * 180)/pi)#Calculates orientation between M1 and M2, in angles
+          DiffCompass.D.M1toM2<-ifelse(DiffCompass.D.M1toM2>0,DiffCompass.D.M1toM2,(360+(DiffCompass.D.M1toM2)))#makes angles go 0-360
           
-          #Step lengths
-          S <- Mod(dZ)
           
-          # time intervals
-          #dT <- diff(Time1)
+          #Two-step function to calculate difference between two angles (which might span 0), and for
+          # which negative values are returned for one direction of turn, and positive for another
+          a = Compass.D.M1toM2 - Compass.D.M1
+          a = ifelse(a>180,a-360,
+                     ifelse(a<(-180),a+360,a))
           
-          # Magnitude of linear velocity between points
-          V <- S/interval.of.frames
+
+
+          #up, down, right, left,upright,upleft,downright,downleft
+          # (defines pairwise angle for plotting quadrant to quadrant angles with relevant orientation)
+          anglecomparisons<-c(pi/2,1.5*pi,0,pi,
+                              pi/4,.75*pi,pi+.75*pi,pi+pi/4)
+          
+          #Depending on which quadrants are being compared, this nested ifelse will assign zervalues corresponding to the 
+          # different elements in the anglecomparisons vector
+          zervalue<-ifelse(comparisonheader=="A3:A1" || comparisonheader=="A4:A2",anglecomparisons[1],
+                           ifelse(comparisonheader=="A1:A3" || comparisonheader=="A2:A4",anglecomparisons[2],
+                                  ifelse(comparisonheader=="A1:A2" || comparisonheader=="A3:A4",anglecomparisons[3],
+                                         ifelse(comparisonheader=="A4:A3" || comparisonheader=="A2:A1", anglecomparisons[4],
+                                                ifelse(comparisonheader=="A3:A2",anglecomparisons[5],
+                                                       ifelse(comparisonheader=="A4:A1",anglecomparisons[6],
+                                                              ifelse(comparisonheader=="A1:A4",anglecomparisons[7],anglecomparisons[8])))))))
+          
+          #Turns angle data into a 'circular' object, for circular plotting
+          circle.Compass.M1.M2<-circular(a, type = "angles",
+                                        units = "degrees",
+                                        template = "none",#c("none", "geographics", "clock12", "clock24"),
+                                        #modulo = c("asis", "2pi", "pi"),
+                                        zero = zervalue) #rotation = c("counter", "clock"), names)
+          
+          
+          
+          rose.diag(circle.Compass.M1.M2, bins = 16, col = colorlist[e], prop = 2, shrink=shrinksize,
+                    main =comparisonheader,col.lab=colorlist[d] ,rotation="clock")
+          
+          
           
           #From Almelda et al. 2010, Indices of movement behaviour: conceptual background, effects of scale and location errors.
           # "The Straightness or linearity index, ST, (BATSCHELET 1981), 
@@ -65,9 +214,16 @@ Mouse2Mouse<-function(xyvalues.allpairs,n.inds=4,interval.of.frames=0.1){
           
           #BATSCHELET, E. 1981. Circular Statistics in Biology. London, Academic Press.
           
-          M2Mcomparison<-cbind(dZ,Phi,c(0,Theta),S,V)
-          colnames(M2Mcomparison)<-paste(comparisonheader,c("StepVector","Orientation","TurningAngle","StepLength","Velocity"),sep='_')
-          M2Mcomparison<-M2Mcomparison[seq(1,nrow(M2Mcomparison),2),]
+          
+          if(flag>1){
+            allcomparisonangles<-cbind(allcomparisonangles,circle.Compass.M1.M2)
+            colnames(allcomparisonangles)[ncol(allcomparisonangles)]<-paste(comparisonheader,"angle",sep='-')
+          } else {
+            allcomparisonangles<-as.data.frame(circle.Compass.M1.M2,ncol=1)
+            colnames(allcomparisonangles)<-paste(comparisonheader,"angle",sep='-')
+          }
+          
+          
           
           
           #############################
@@ -79,17 +235,48 @@ Mouse2Mouse<-function(xyvalues.allpairs,n.inds=4,interval.of.frames=0.1){
           # AvgTurn<-mean(Theta)
           
           
-          if(flag>1){
-            allcomparisons<-cbind(allcomparisons,M2Mcomparison)
-          } else {
-            allcomparisons<-M2Mcomparison
-          }
+
           flag<-flag+1
+          }
         }  
       
+      
+     if(d>1){
+       maintraveldis<-cbind(maintraveldis,distanctrav)
+       colnames(maintraveldis)[ncol(maintraveldis)]<-paste(nom1,"step",sep='')
+     } else {
+       maintraveldis<-as.data.frame(distanctrav,ncol=1)
+       colnames(maintraveldis)<-paste(nom1,"step",sep='')
+     }
+     
+      if(d>1){
+        maintravelangles<-cbind(maintravelangles,circle.Compass.D.M1)
+        colnames(maintravelangles)[ncol(maintravelangles)]<-paste(nom1,"angles",sep='-')
+      } else {
+        maintravelangles<-as.data.frame(circle.Compass.D.M1,ncol=1)
+        colnames(maintravelangles)<-paste(nom1,"angles",sep='-')
+      }
     }
+  
+    allcomparisons<-cbind(maintraveldis,maintravelangles,allcomparisonangles)
+  
+    
+  #Add on data.frame construction, making new columns corresponding 
+  # to change (Delta) in pairwise distances (to be used when using movement data for behavioral categorization)
+    G<-apply(pairwisedistances,2,function(x) c(0,diff(x)))
+    colnames(G)<-paste("Delta.",colnames(pairwisedistances),sep='')
+    G<-G[-1,]
+    
+    allcomparisons<-cbind(allcomparisons,G)
+    
+
+  
+  
+  
   return(allcomparisons)
 }
+
+
 
 
 
@@ -120,6 +307,7 @@ pairwise.Distances<-function(dataframeCombinedInfo,inds=4){
 }
 
 
+
 # Associate.Identifier ----------------------------------------------------
 #Using the *dataframeCombinedInfo*, which should contain pairwise distance columns with "dist" in the column names
 # cheks for associations based on whether the distances are smaller than 'AssociatingDistance.pixels' threshold
@@ -138,6 +326,7 @@ Associate.Identifier<-function(dataframeCombinedInfo,AssociatingDistance.pixels)
 }
 
 
+
 # add.alpha ---------------------------------------------------------------
 ## Add an alpha value to a colour
 add.alpha <- function(col, alpha=1){
@@ -147,6 +336,7 @@ add.alpha <- function(col, alpha=1){
         function(x) 
           rgb(x[1], x[2], x[3], alpha=alpha))  
 }
+
 
 
 # characteriseTrajectory --------------------------------------------------
