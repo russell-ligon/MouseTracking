@@ -8,6 +8,73 @@ library(circular)
 
 
 
+# CreateCompositeList -----------------------------------------------------
+#Loops through each folder in 'directories'
+# pulls files corresponding to tracking informaiton (location.names)
+# and ROI information (Roifiles)
+# then names the information from these files and amalgamates into a data.frame called CombinedInfo
+# then puts that dataframe into the list AllFoldersList at position zz
+
+CreateCompositeList<-function(directories,pix.cm=4.2924,AssociatingDistance.cm=10,
+                                xytrackpattern="fixed.csv",roipattern="-region"){
+  #directories should include all folders/subfolder with tracking data
+  #pix.cm defines the pixels/cm correction
+  #AssociatingDistance.cm Defines cm distance that corresponding to an 'association'
+  AllFoldersList<-list() #Creates empty list which will get filled iteratively with loop
+  flag<-1 #sets flag, which will only increase when looping through folders containing the "correct" kind of data
+  
+  
+  for (zz in 1:length(directories)){
+    FolderInfo1<-directories[zz]#pull full 
+    FolderInfo<-strsplit(FolderInfo1,"/")[[1]][length(strsplit(FolderInfo1,"/")[[1]])]
+    FolderInfo<-paste(strsplit(FolderInfo1,"/")[[1]][(length(strsplit(FolderInfo1,"/")[[1]])-1)],FolderInfo,sep='.')
+    location.names<-list.files(directories[zz],full.names=TRUE,pattern=xytrackpattern)#change pattern to only pull location csvs
+    
+    if(length(location.names)>0){ #Only if in the right kind of folder, i.e. containing ...fixed.csv files, run the rest, otherwise, skip
+      
+      Roifiles<-list.files(directories[zz],full.names = TRUE,pattern=roipattern)#refine to pull roi csvs
+      Roifilenames<-list.files(directories[zz],full.names = FALSE,pattern=roipattern)#refine to pull roi csvs
+      inds<-length(location.names)
+      
+      for(Caleb in 1:inds){
+        Location<-read.csv(location.names[Caleb])
+        colnames(Location)[2:3]<-paste(colnames(Location)[2:3],".A",Caleb,sep='')
+        Location[,3]<-(Location[,3]-1080)*(-1)
+        
+        if(Caleb>1){
+          CombinedInfo<-merge(CombinedInfo,Location,by="position")
+        } else {
+          CombinedInfo<-Location
+        }
+        
+      }
+      
+      
+      #CombinedInfo[,c(2:ncol(CombinedInfo))]<-CombinedInfo[,c(2:ncol(CombinedInfo))]/(pix.cm)
+      #CombinedInfo<-round(CombinedInfo)
+      CombinedInfo<-pairwise.Distances(CombinedInfo,inds)#Custom function located in MouseFunctions.R
+      ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
+      dister<-(inds*2+2)
+      CombinedInfo[,c(dister:(dister+ncomparisons-1))]<-(CombinedInfo[,c(dister:(dister+ncomparisons-1))])/(pix.cm)
+      CombinedInfo<-Associate.Identifier(CombinedInfo,AssociatingDistance.cm)#Custom function located in MouseFunctions.R
+      
+      for(Caitlin in 1:length(Roifiles)){
+        ROI<-read.csv(Roifiles[Caitlin])
+        roiname<-Roifilenames[Caitlin]
+        colnames(ROI)[2]<-roiname
+        CombinedInfo<-merge(CombinedInfo,ROI, by="position")
+      }
+      
+      
+      AllFoldersList[[flag]]<-CombinedInfo #puts CombinedInfo dataframe into AllFoldersList at position zz
+      names(AllFoldersList)[[flag]]<-FolderInfo #applies name of folder to list element
+      flag<-flag+1
+    }
+  }  
+  
+  return(AllFoldersList)
+}
+
 
 
 # BehaviorCategorizer -----------------------------------------------------
@@ -17,7 +84,6 @@ library(circular)
 # integratesteps = n of frames over which to calculate rolling averages for angles and delta pairwise distances for calculating approaching/leaving
 # walk.speed = cm/sec threshold, above which = running
 
-
 BehaviorCategorizer<-function(Big,approach.angle=90,leave.angle=90,integratesteps=10,n.inds=4,walk.speed=10,stationary.noise=.5){
   orderedcomparisons<-2*(n.inds-1)*2
   OrderedMicePairs<-colnames(Big)[grep(":",colnames(Big))]
@@ -25,7 +91,7 @@ BehaviorCategorizer<-function(Big,approach.angle=90,leave.angle=90,integratestep
   Bog<-rollapply(BigSub,width=integratesteps,mean,na.rm=TRUE,partial=TRUE,align="left")
   MouseDisp<-Big[,grep("step",colnames(Big))]
   RunMouse<-rollapply(MouseDisp,width=integratesteps,sum,na.rm=TRUE,partial=TRUE,align="left")
-    
+  colnames(RunMouse)<-gsub("step","cm/s",colnames(RunMouse))  
   #left alignment means that the locations we identify for behaviors (e.g. approaches)
   # will corespond to the 'start' of the behavior
   
@@ -64,7 +130,10 @@ BehaviorCategorizer<-function(Big,approach.angle=90,leave.angle=90,integratestep
   for(rory in 1:orderedcomparisons){
     plusr<-rory+orderedcomparisons
     
-    approachingthismouse<-ifelse(socialmovements[,rory]==1 & socialmovements[,c(grepl(oc3[[rory]][1],colnames(socialmovements))&grepl(oc3[[rory]][2],colnames(socialmovements))&grepl("Delta",colnames(socialmovements)))]<0,1,0)
+    approachingthismouse<-ifelse(socialmovements[,rory]==1 & socialmovements[,c(grepl(oc3[[rory]][1],colnames(socialmovements))&
+                                                                                  grepl(oc3[[rory]][2],colnames(socialmovements))&
+                                                                                  grepl("Delta",colnames(socialmovements)))]<0 & 
+                                                                                  movingbehavior[,grepl(oc3[[rory]][1],colnames(movingbehavior))]!="stationary",1,0)
     approachingthismouse<-as.data.frame(approachingthismouse,ncol=1)
     colnames(approachingthismouse)<-  gsub(":",".app.",gsub("-angle","",OrderedMicePairs))[rory]
 
@@ -75,7 +144,10 @@ BehaviorCategorizer<-function(Big,approach.angle=90,leave.angle=90,integratestep
       approachingbehavior<-cbind(approachingbehavior,approachingthismouse)
     }
  
-    leavingthismouse<-ifelse(socialmovements[,plusr]==1 & socialmovements[,c(grepl(oc3[[rory]][1],colnames(socialmovements))&grepl(oc3[[rory]][2],colnames(socialmovements))&grepl("Delta",colnames(socialmovements)))]>0,1,0)
+    leavingthismouse<-ifelse(socialmovements[,plusr]==1 & socialmovements[,c(grepl(oc3[[rory]][1],colnames(socialmovements))&
+                                                                               grepl(oc3[[rory]][2],colnames(socialmovements))&
+                                                                               grepl("Delta",colnames(socialmovements)))]>0 &
+                                                                               movingbehavior[,grepl(oc3[[rory]][1],colnames(movingbehavior))]!="stationary",1,0)
     leavingthismouse<-as.data.frame(leavingthismouse,ncol=1)
     colnames(leavingthismouse)<-  gsub(":",".lvs.",gsub("-angle","",OrderedMicePairs))[rory]
 
@@ -86,7 +158,7 @@ BehaviorCategorizer<-function(Big,approach.angle=90,leave.angle=90,integratestep
     }
   }
   
-  oknow<-cbind(movingbehavior,approachingbehavior,leavingbehavior)
+  oknow<-cbind(RunMouse,movingbehavior,approachingbehavior,leavingbehavior)
   
   return(oknow)
 }
