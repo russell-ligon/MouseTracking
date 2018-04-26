@@ -34,9 +34,9 @@ CreateCompositeList<-function(directories,pix.cm=4.2924,AssociatingDistance.cm=1
       
       Roifiles<-list.files(directories[zz],full.names = TRUE,pattern=roipattern)#refine to pull roi csvs
       Roifilenames<-list.files(directories[zz],full.names = FALSE,pattern=roipattern)#refine to pull roi csvs
-      inds<-length(location.names)
+      individuals<-length(location.names)
       
-      for(Caleb in 1:inds){
+      for(Caleb in 1:individuals){
         Location<-read.csv(location.names[Caleb])
         colnames(Location)[2:3]<-paste(colnames(Location)[2:3],".A",Caleb,sep='')
         Location[,3]<-(Location[,3]-1080)*(-1)
@@ -54,10 +54,10 @@ CreateCompositeList<-function(directories,pix.cm=4.2924,AssociatingDistance.cm=1
       if(roundxy==TRUE){
       CombinedInfo<-round(CombinedInfo)
       }
-        if(inds>1){
-          CombinedInfo<-pairwise.Distances(CombinedInfo,inds)#Custom function located in MouseFunctions.R
-          ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
-          dister<-(inds*2+2)
+        if(individuals>1){
+          CombinedInfo<-pairwise.Distances(CombinedInfo,individuals)#Custom function located in MouseFunctions.R
+          ncomparisons<-2*(individuals-1) #Calculates number of unique dyadic comparisons based on the n of individuals
+          dister<-(individuals*2+2)
           CombinedInfo[,c(dister:(dister+ncomparisons-1))]<-(CombinedInfo[,c(dister:(dister+ncomparisons-1))])/(pix.cm)
           CombinedInfo<-Associate.Identifier(CombinedInfo,AssociatingDistance.cm)#Custom function located in MouseFunctions.R
         }
@@ -367,7 +367,7 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,shrinksize=.7
 
 
 pairwise.Distances<-function(dataframeCombinedInfo,inds=4){
-  if(inds<2){
+  if(inds>1){
   individual.names<-gsub("x0.","",colnames(dataframeCombinedInfo)[seq(2,inds*2,2)])#pulls subset of column names, corresponding to the # of inds, and uses gsub to substitute 'blank' for x0.
   ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
   for(i in 1:(inds-1)){
