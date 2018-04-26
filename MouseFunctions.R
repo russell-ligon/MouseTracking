@@ -16,7 +16,7 @@ library(circular)
 # then puts that dataframe into the list AllFoldersList at position zz
 
 CreateCompositeList<-function(directories,pix.cm=4.2924,AssociatingDistance.cm=10,
-                                xytrackpattern="fixed.csv",roipattern="-region"){
+                                xytrackpattern="fixed.csv",roipattern="-region",roundxy=TRUE){
   #directories should include all folders/subfolder with tracking data
   #pix.cm defines the pixels/cm correction
   #AssociatingDistance.cm Defines cm distance that corresponding to an 'association'
@@ -51,7 +51,9 @@ CreateCompositeList<-function(directories,pix.cm=4.2924,AssociatingDistance.cm=1
       
       
       #CombinedInfo[,c(2:ncol(CombinedInfo))]<-CombinedInfo[,c(2:ncol(CombinedInfo))]/(pix.cm)
-      #CombinedInfo<-round(CombinedInfo)
+      if(roundxy==TRUE){
+      CombinedInfo<-round(CombinedInfo)
+      }
       CombinedInfo<-pairwise.Distances(CombinedInfo,inds)#Custom function located in MouseFunctions.R
       ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
       dister<-(inds*2+2)
@@ -171,10 +173,10 @@ BehaviorCategorizer<-function(Big,approach.angle=90,leave.angle=90,integratestep
 # Function that takes two columns, per individual, of x/y coordinates
 # (e.g. 4 individuals, n.inds=4, should correspond to 8 columns (xyvalues.allpairs))
 # Returns pairwise distances, orientations at each time point (i.e. whether a mouse is moving towards another) and velocities
-Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,interval.of.frames=0.1,shrinksize=.75){ 
+Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,shrinksize=.75,pix.cm=4.2924){ 
   #xyvalues.allpairs = subset of full dataframe containing original all x,y coordinates for all
   # n.inds = number of individual mice
- # interval.of.frames used for calculating velocity towards one another (0.1 = 10fps)
+ 
   
   ncomparisons<-2*(n.inds-1)
   flag<-1
@@ -196,7 +198,7 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,interval.of.f
       # orientation of each step
       distanctrav<-Mod(dZ1)/pix.cm
       Z1.Phi <- Arg(dZ1)
-      Compass.D.M1<-(90 - (Arg(dZ1) * 180)/pi)
+      Compass.D.M1<-((Z1.Phi * 180)/pi)
       Compass.D.M1<-ifelse(Compass.D.M1>0,Compass.D.M1,(360+(Compass.D.M1)))
         
       
@@ -211,7 +213,7 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,interval.of.f
                 main = nom1,rotation="clock")
 
       
-        for(e in 1:inds){  #Loops through all others
+        for(e in 1:n.inds){  #Loops through all others
           if(d!=e){
           
           a2<-(e-1)*2+1
@@ -235,12 +237,14 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,interval.of.f
           Z1Z2.Phi <- Z1Z2.Phi[seq(1,nrow(Z1Z2.Phi),2),]
           Z1Z2.Phi <- Z1Z2.Phi[c(1:(length(Z1Z2.Phi)-1))]
           
-          Compass.D.M1toM2<-(90 - (Z1Z2.Phi * 180)/pi)#Calculates orientation between M1 and M2, in angles
-      
-          AngularDifference<-atan2(sin(Z1Z2.Phi-Z1.Phi), cos(Z1Z2.Phi-Z1.Phi))
-          DiffCompass.D.M1toM2<-(90 - ((AngularDifference) * 180)/pi)#Calculates orientation between M1 and M2, in angles
-          DiffCompass.D.M1toM2<-ifelse(DiffCompass.D.M1toM2>0,DiffCompass.D.M1toM2,(360+(DiffCompass.D.M1toM2)))#makes angles go 0-360
+          Compass.D.M1toM2<-((Z1Z2.Phi * 180)/pi)#Calculates orientation between M1 and M2, in angles
+          Compass.D.M1toM2<-ifelse(Compass.D.M1toM2>0,Compass.D.M1toM2,(360+(Compass.D.M1toM2)))
           
+          
+          # AngularDifference<-atan2(sin(Z1Z2.Phi-Z1.Phi), cos(Z1Z2.Phi-Z1.Phi))
+          # DiffCompass.D.M1toM2<-(90 - ((AngularDifference) * 180)/pi)#Calculates orientation between M1 and M2, in angles
+          # DiffCompass.D.M1toM2<-ifelse(DiffCompass.D.M1toM2>0,DiffCompass.D.M1toM2,(360+(DiffCompass.D.M1toM2)))#makes angles go 0-360
+          # 
           
           #Two-step function to calculate difference between two angles (which might span 0), and for
           # which negative values are returned for one direction of turn, and positive for another
@@ -288,10 +292,10 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,interval.of.f
           
           
           if(flag>1){
-            allcomparisonangles<-cbind(allcomparisonangles,circle.Compass.M1.M2)
+            allcomparisonangles<-cbind(allcomparisonangles,a)
             colnames(allcomparisonangles)[ncol(allcomparisonangles)]<-paste(comparisonheader,"angle",sep='-')
           } else {
-            allcomparisonangles<-as.data.frame(circle.Compass.M1.M2,ncol=1)
+            allcomparisonangles<-as.data.frame(a,ncol=1)
             colnames(allcomparisonangles)<-paste(comparisonheader,"angle",sep='-')
           }
           
@@ -322,10 +326,10 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,interval.of.f
      }
      
       if(d>1){
-        maintravelangles<-cbind(maintravelangles,circle.Compass.D.M1)
+        maintravelangles<-cbind(maintravelangles,Compass.D.M1)
         colnames(maintravelangles)[ncol(maintravelangles)]<-paste(nom1,"angles",sep='-')
       } else {
-        maintravelangles<-as.data.frame(circle.Compass.D.M1,ncol=1)
+        maintravelangles<-as.data.frame(Compass.D.M1,ncol=1)
         colnames(maintravelangles)<-paste(nom1,"angles",sep='-')
       }
     }
