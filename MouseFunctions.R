@@ -54,19 +54,21 @@ CreateCompositeList<-function(directories,pix.cm=4.2924,AssociatingDistance.cm=1
       if(roundxy==TRUE){
       CombinedInfo<-round(CombinedInfo)
       }
-      CombinedInfo<-pairwise.Distances(CombinedInfo,inds)#Custom function located in MouseFunctions.R
-      ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
-      dister<-(inds*2+2)
-      CombinedInfo[,c(dister:(dister+ncomparisons-1))]<-(CombinedInfo[,c(dister:(dister+ncomparisons-1))])/(pix.cm)
-      CombinedInfo<-Associate.Identifier(CombinedInfo,AssociatingDistance.cm)#Custom function located in MouseFunctions.R
-      
-      for(Caitlin in 1:length(Roifiles)){
-        ROI<-read.csv(Roifiles[Caitlin])
-        roiname<-Roifilenames[Caitlin]
-        colnames(ROI)[2]<-roiname
-        CombinedInfo<-merge(CombinedInfo,ROI, by="position")
+        if(inds>1){
+          CombinedInfo<-pairwise.Distances(CombinedInfo,inds)#Custom function located in MouseFunctions.R
+          ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
+          dister<-(inds*2+2)
+          CombinedInfo[,c(dister:(dister+ncomparisons-1))]<-(CombinedInfo[,c(dister:(dister+ncomparisons-1))])/(pix.cm)
+          CombinedInfo<-Associate.Identifier(CombinedInfo,AssociatingDistance.cm)#Custom function located in MouseFunctions.R
+        }
+      if(length(Roifilenames)>1){
+        for(Caitlin in 1:length(Roifiles)){
+          ROI<-read.csv(Roifiles[Caitlin])
+          roiname<-Roifilenames[Caitlin]
+          colnames(ROI)[2]<-roiname
+          CombinedInfo<-merge(CombinedInfo,ROI, by="position")
+        }
       }
-      
       
       AllFoldersList[[flag]]<-CombinedInfo #puts CombinedInfo dataframe into AllFoldersList at position zz
       names(AllFoldersList)[[flag]]<-FolderInfo #applies name of folder to list element
@@ -365,6 +367,7 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,shrinksize=.7
 
 
 pairwise.Distances<-function(dataframeCombinedInfo,inds=4){
+  if(inds<2){
   individual.names<-gsub("x0.","",colnames(dataframeCombinedInfo)[seq(2,inds*2,2)])#pulls subset of column names, corresponding to the # of inds, and uses gsub to substitute 'blank' for x0.
   ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
   for(i in 1:(inds-1)){
@@ -380,6 +383,7 @@ pairwise.Distances<-function(dataframeCombinedInfo,inds=4){
     }
   }
   return(dataframeCombinedInfo) #returns original dataframe with additional columns corresponding to dyadic distances at each timepoint
+  }
 }
 
 
