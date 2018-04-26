@@ -1,106 +1,34 @@
 
 
-
+library(MASS)
 
 
 setwd("C:/Users/Rusty/Amazon Drive/MICE")
 source("MouseFunctions.R", chdir = F)
 
 
-library(MASS)
+
 
 
 setwd(dir<-"C:/Users/Rusty/Amazon Drive/MICE/IR")#sets working directory (setwd), and new variable (dir) corresponding to parent directory
-
 MetaData<-read.csv("master_summary.csv")
-
-
 directories<-list.dirs(dir,recursive = TRUE)#list.dirs lists directories 
 directories<-directories[-1]#removes "self" directory
 
-
-
-
-# CreateCompositeList -----------------------------------------------------
-#Loops through each folder in 'directories'
-# pulls files corresponding to tracking informaiton (location.names)
-# and ROI information (Roifiles)
-# then names the information from these files and amalgamates into a data.frame called CombinedInfo
-# then puts that dataframe into the list AllFoldersList at position zz
-
-AllFoldersList<-list() #Creates empty list which will get filled iteratively with loop
-pix.cm<-4.2924
-AssociatingDistance.cm<-10 # Define cm distance that corresponding to an 'association'
-flag<-1 #sets flag, which will only increase when looping through folders containing the "correct" kind of data
-for (zz in 1:length(directories)){
-  FolderInfo1<-directories[zz]#pull full 
-  FolderInfo<-strsplit(FolderInfo1,"/")[[1]][length(strsplit(FolderInfo1,"/")[[1]])]
-  FolderInfo<-paste(strsplit(FolderInfo1,"/")[[1]][(length(strsplit(FolderInfo1,"/")[[1]])-1)],FolderInfo,sep='.')
-  location.names<-list.files(directories[zz],full.names=TRUE,pattern="fixed.csv")#change pattern to only pull location csvs
-  
-  if(length(location.names)>0){ #Only if in the right kind of folder, i.e. containing ...fixed.csv files, run the rest, otherwise, skip
-  
-    Roifiles<-list.files(directories[zz],full.names = TRUE,pattern="-region")#refine to pull roi csvs
-    Roifilenames<-list.files(directories[zz],full.names = FALSE,pattern="-region")#refine to pull roi csvs
-    inds<-length(location.names)
-    
-    for(Caleb in 1:inds){
-      Location<-read.csv(location.names[Caleb])
-      colnames(Location)[2:3]<-paste(colnames(Location)[2:3],".A",Caleb,sep='')
-      Location[,3]<-(Location[,3]-1080)*(-1)
-     
-      if(Caleb>1){
-        CombinedInfo<-merge(CombinedInfo,Location,by="position")
-      } else {
-        CombinedInfo<-Location
-      }
-      
-    }
-    
-    
-    #CombinedInfo[,c(2:ncol(CombinedInfo))]<-CombinedInfo[,c(2:ncol(CombinedInfo))]/(pix.cm)
-    #CombinedInfo<-round(CombinedInfo)
-    CombinedInfo<-pairwise.Distances(CombinedInfo,inds)#Custom function located in MouseFunctions.R
-    ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
-    dister<-(inds*2+2)
-    CombinedInfo[,c(dister:(dister+ncomparisons-1))]<-(CombinedInfo[,c(dister:(dister+ncomparisons-1))])/(pix.cm)
-    CombinedInfo<-Associate.Identifier(CombinedInfo,AssociatingDistance.cm)#Custom function located in MouseFunctions.R
-    
-    for(Caitlin in 1:length(Roifiles)){
-      ROI<-read.csv(Roifiles[Caitlin])
-      roiname<-Roifilenames[Caitlin]
-      colnames(ROI)[2]<-roiname
-      CombinedInfo<-merge(CombinedInfo,ROI, by="position")
-    }
-    
-    
-    AllFoldersList[[flag]]<-CombinedInfo #puts CombinedInfo dataframe into AllFoldersList at position zz
-    names(AllFoldersList)[[flag]]<-FolderInfo #applies name of folder to list element
-    flag<-flag+1
-  }
-}  
-
-
-
-
-
-
-
+AllFoldersList<-CreateCompositeList(directories,pix.cm=4.2924,AssociatingDistance.cm=10,xytrackpattern="fixed.csv",roipattern="-region")
 
 
 
 
 # TrialSpecificManipulations ----------------------------------------------
 
-CombinedInfo<-AllFoldersList[[1]]#pull dataframe corresponding to particular day/trial
+CombinedInfo<-AllFoldersList$T002.D2#pull dataframe corresponding to particular day/trial
 #CombinedInfo<-CombinedInfo[c(1:(10*floor(nrow(CombinedInfo)/10))),] #makes nrow divisible by 10 for subsampling purposes
 #CombinedInfo.sub<-cbind(0.1*CombinedInfo[seq(1,length(CombinedInfo$position),10),1],
 #                        apply(CombinedInfo[,c(2:21)],2,function(x) colMeans(matrix(x, nrow=10)))) #
 # colnames(CombinedInfo.sub)[1]<-"position"
 # CombinedInfo.sub<-as.data.frame(CombinedInfo.sub)
 # summary(CombinedInfo.sub)
-
-
 
 BASE<-matrix(summary(CombinedInfo),nrow=7)
 colnames(BASE)<-colnames(CombinedInfo)
@@ -121,13 +49,44 @@ for(g in 1:length(check)){
 
 
 #Creates large, mouse-to-mouse dataset at each step ()
-Huge<-Mouse2Mouse(CombinedInfo[,c(2:9)],n.inds=4,interval.of.frames=0.1)
+pdf("MouseAngles.pdf",width= 8, height= 8,family="NimbusRom")
+par(mfrow=c(4,4))# rows, columns
+MouseAngles<-Mouse2Mouse(CombinedInfo[,c(2:9)],pairwisedistances=CombinedInfo[,c(10:15)],
+                         n.inds=4,interval.of.frames=0.1,shrinksize=.85,pix.cm=4.2924)
+dev.off()
+
+Big<-cbind(CombinedInfo[-1,],MouseAngles)
+#Categorizes behavior
+behaviors<-BehaviorCategorizer(Big,approach.angle=40,leave.angle=90,integratesteps=10,n.inds=4,walk.speed=10,stationary.noise=.5)
+HugeMouse<-cbind(Big,behaviors)
+colnames(HugeMouse)
+
+summary(HugeMouse)
+
+
+
+
+apply(HugeMouse[,c(52:55)],2,function(x) hist(log(x[which(x>0.5)]),breaks=100))
+apply(HugeMouse[,c(52:55)],2,function(x) hist(log(x),breaks=100))
+apply(HugeMouse[,c(30:33)],2,function(x) hist((x),breaks=100))
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 library(trajr)
 
-A1trj <- TrajFromCoords(CombinedInfo[,c(2,3,1)],fps=10);
+A1trj <- TrajFromCoords(CombinedInfo[,c(2,3,1)],fps=10)
 A2trj <- TrajFromCoords(CombinedInfo[,c(4,5,1)],fps=10)
 A3trj <- TrajFromCoords(CombinedInfo[,c(6,7,1)],fps=10)
 A4trj <- TrajFromCoords(CombinedInfo[,c(8,9,1)],fps=10)
@@ -136,11 +95,17 @@ All.arenas<-list(A1trj,A2trj,A3trj,A4trj)
 
 for(tjmax in 1:length(All.arenas)){
   sp.Traj<-All.arenas[[tjmax]]
+  test<-sp.Traj[c(1:1000),]
   print(TrajLength(sp.Traj))
   print(paste("Trajectory length ",TrajLength(sp.Traj)/100/1000/pix.cm))
   sp.Traj$displaceDist<-c(0,Mod(diff(sp.Traj$polar[0:nrow(sp.Traj)])))
   #sp.Traj$A1.A2<-Arg(trj$displacement[2:nrow(trj)]) - compass.direction
   sorted.displace<-sp.Traj[order(-sp.Traj$displaceDist),]
+  
+  plot(test$displacement, asp = 1, type = "n")
+  arrows(rep(0, length(test$displacement)), rep(0, length(test$displacement)), 
+         Re(test$displacement), Im(test$displacement), col = rgb(0,0, 0, 0.25), lwd = 2, length = 0.1)
+  
 }
 
 ch<-c(NA,TrajAngles(sp.Traj,compass.direction = 0))
@@ -217,7 +182,7 @@ allheat<-kde2d(c(CombinedInfo$x0.A1,CombinedInfo$x0.A2,CombinedInfo$x0.A3,Combin
               c(CombinedInfo$y0.A1,CombinedInfo$y0.A2,CombinedInfo$y0.A3,CombinedInfo$y0.A4), h=75, n=200)
 filled.contour(allheat,color.palette=colorRampPalette(c('purple','blue','yellow','red','darkred')),ylim=c(0,1080),xlim=c(0,1400))
 
-colfunc<-colorRampPalette(rev(c("red","yellow","springgreen","royalblue","black")))
+colfunc<-colorRampPalette(rev(c("red","orange","yellow","springgreen","aquamarine","mediumblue","darkorchid4","gray40","black")))
 image(allheat$x, allheat$y, allheat$z, col = colfunc(50), axes = TRUE,ylab="Vertical coordinates",
       xlab="Horizontal coordinates",main="Activity")
 
