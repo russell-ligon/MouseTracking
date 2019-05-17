@@ -15,7 +15,8 @@ MetaData<-read.csv("master_summary.csv")
 directories<-list.dirs(dir,recursive = TRUE)#list.dirs lists directories 
 directories<-directories[-1]#removes "self" directory
 
-AllFoldersList<-CreateCompositeList(directories,pix.cm=4.2924,AssociatingDistance.cm=10,xytrackpattern="fixed.csv",roipattern="-region")
+AllFoldersList<-CreateCompositeList(directories,pix.cm=4.2924,AssociatingDistance.cm=10,
+                                    xytrackpattern="fixed.csv",roipattern="-region",roundxy=TRUE)
 
 
 
@@ -30,7 +31,9 @@ CombinedInfo<-AllFoldersList$T002.D2#pull dataframe corresponding to particular 
 # CombinedInfo.sub<-as.data.frame(CombinedInfo.sub)
 # summary(CombinedInfo.sub)
 
-BASE<-matrix(summary(CombinedInfo),nrow=7)
+
+
+BASE<-matrix(summary(CombinedInfo),nrow=length(summary(CombinedInfo)[,1]))
 colnames(BASE)<-colnames(CombinedInfo)
 
 
@@ -52,7 +55,7 @@ for(g in 1:length(check)){
 pdf("MouseAngles.pdf",width= 8, height= 8,family="NimbusRom")
 par(mfrow=c(4,4))# rows, columns
 MouseAngles<-Mouse2Mouse(CombinedInfo[,c(2:9)],pairwisedistances=CombinedInfo[,c(10:15)],
-                         n.inds=4,interval.of.frames=0.1,shrinksize=.85,pix.cm=4.2924)
+                         n.inds=4,shrinksize=.85,pix.cm=4.2924)
 dev.off()
 
 Big<-cbind(CombinedInfo[-1,],MouseAngles)
@@ -64,15 +67,18 @@ colnames(HugeMouse)
 summary(HugeMouse)
 
 
-
-
 apply(HugeMouse[,c(52:55)],2,function(x) hist(log(x[which(x>0.5)]),breaks=100))
 apply(HugeMouse[,c(52:55)],2,function(x) hist(log(x),breaks=100))
 apply(HugeMouse[,c(30:33)],2,function(x) hist((x),breaks=100))
 
 
 
+pdf("MouseAngles22.pdf",width= 8, height= 8,family="NimbusRom")
+par(mfrow=c(4,4))# rows, columns
 
+MouseAngles2<-Mouse2Mouse(HugeMouse[which(HugeMouse),c(2:9)],pairwisedistances=HugeMouse[,c(10:15)],
+                         n.inds=4,shrinksize=.85,pix.cm=4.2924)
+dev.off()
 
 
 
@@ -107,6 +113,8 @@ for(tjmax in 1:length(All.arenas)){
          Re(test$displacement), Im(test$displacement), col = rgb(0,0, 0, 0.25), lwd = 2, length = 0.1)
   
 }
+
+plot(test)
 
 ch<-c(NA,TrajAngles(sp.Traj,compass.direction = 0))
 
