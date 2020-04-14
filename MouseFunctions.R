@@ -6,6 +6,347 @@ library(zoo)
 library(circular)
 
 
+####DOWNSAMPLES DATA to 1HTZ
+onesecond.downsampler<-function(datatodownsample=profileplainpee,startingnames=profileplainpee$label){
+  
+  #print(paste("Downsampling ",dir,sep=''))
+  #frameinfo<-lapply(FullFiles.FullNames,function(x) strsplit(x,"2018-"))
+
+  if(length(grep("2019",startingnames[1]))==0){
+    frameinfo<-strsplit(startingnames,"2019-")
+  } else {
+    frameinfo<-strsplit(startingnames,"2018-")
+  }
+  
+  
+  alltimes<-lapply(frameinfo,function(x) strsplit(x[2],".csv"))
+  oknow<-lapply(alltimes,function(x) strsplit(x[[1]],"_"))
+  oknow2<-unlist(lapply(oknow,function(x) x[[1]][c(2)]))
+  oknow3<-unlist(lapply(oknow,function(x) x[[1]][c(1)]))
+  
+  fileinformation<-data.frame(matrix(unlist(alltimes),nrow=length(alltimes),byrow=T));colnames(fileinformation)<-"V1"
+  fileinformation$day<-oknow3
+  fileinformation$tosecond<-oknow2
+  fileinformation$check<-paste(oknow3,oknow2,sep="-")
+  fileinformation$unique.time<-!duplicated(fileinformation$check)      
+  
+  
+  #deleters<-fileinformation[which(!fileinformation$unique.time),]
+  
+  downsampled<-datatodownsample[which(fileinformation$unique.time),]
+  return(downsampled)
+}
+#downsample just list of names
+onesecondgroups<-function(startingnames){
+  if(length(grep("2019",startingnames[1]))==0){
+    frameinfo<-strsplit(startingnames,"2018-")
+  } else {
+    frameinfo<-strsplit(startingnames,"2019-")
+  }
+  
+  alltimes<-lapply(frameinfo,function(x) strsplit(x[2],".csv"))
+  oknow<-lapply(alltimes,function(x) strsplit(x[[1]],"_"))
+  oknow2<-unlist(lapply(oknow,function(x) x[[1]][c(2)]))
+  oknow3<-unlist(lapply(oknow,function(x) x[[1]][c(1)]))
+  
+  fileinformation<-data.frame(matrix(unlist(alltimes),nrow=length(alltimes),byrow=T));colnames(fileinformation)<-"V1"
+  fileinformation$day<-oknow3
+  fileinformation$tosecond<-oknow2
+  fileinformation$check<-paste(oknow3,oknow2,sep="-")
+  return(fileinformation$check)
+}
+#just return downsample indices
+onesecond.index<-function(startingnames){
+  if(length(grep("2019",startingnames[1]))==0){
+    frameinfo<-strsplit(startingnames,"2018-")
+  } else {
+    frameinfo<-strsplit(startingnames,"2019-")
+  }
+  
+  alltimes<-lapply(frameinfo,function(x) strsplit(x[2],".csv"))
+  oknow<-lapply(alltimes,function(x) strsplit(x[[1]],"_"))
+  oknow2<-unlist(lapply(oknow,function(x) x[[1]][c(2)]))
+  oknow3<-unlist(lapply(oknow,function(x) x[[1]][c(1)]))
+  
+  fileinformation<-data.frame(matrix(unlist(alltimes),nrow=length(alltimes),byrow=T));colnames(fileinformation)<-"V1"
+  fileinformation$day<-oknow3
+  fileinformation$tosecond<-oknow2
+  fileinformation$check<-paste(oknow3,oknow2,sep="-")
+  fileinformation$unique.time<-!duplicated(fileinformation$check) 
+  return(which(fileinformation$unique.time))
+  
+}
+
+#takes dataframe (use keeplongA13, keeplongA24), and trial/day specific roi information to add the roi where pee happens
+#RETURNS [[1]] dataframe with ROI-identified pee coords & [[2]] dataframe with info on errors
+peeroi<-function(dfwp,inforoi){
+  library(sp)
+  dfwp$peeroi<-NA
+  dfwp$peeroiFULL<-NA
+  dfhold<-dfwp
+  
+  dfwp2<-dfwp[which(!is.na(dfwp$mTemp)),]
+  replacementrowvalue<-which(!is.na(dfwp$mTemp))
+  
+  #pulls just the roi info for the correct camera
+  if(length(grep("a1",colnames(dfwp)))>1){
+    inforoi2<-inforoi[which(inforoi$arena=="a1" | inforoi$arena=="a3"),]
+  }
+  if(length(grep("a2",colnames(dfwp)))>1){
+    inforoi2<-inforoi[which(inforoi$arena=="a2" | inforoi$arena=="a4"),]
+  }
+  
+  
+  if(nrow(dfwp2)==0){
+    dfhold<-dfhold
+  } else {
+    errorflag<-1
+    for(r in 1:nrow(dfwp2)){
+      ne<-0
+      for(s in 1:nrow(inforoi2)){
+        
+        e<-point.in.polygon(dfwp2$true.x[r],dfwp2$true.y[r],pol.x=c(inforoi2[s,c(6,8,10,12)]),pol.y=c(inforoi2[s,c(7,9,11,13)]))
+        #e2<-ifelse(e==1 & dfwp2[r,"quad"]==inforoi[s,"arena"],1,0)
+        ne<-c(ne,e)
+      }
+      ne<-ne[-1] #drop first entry, which was created as 0 before s loop
+      roispossible<-inforoi2$ROI_name[ne==1]
+      roispossible<-unique(roispossible)
+      fullpossiblerois<-paste(as.character(roispossible),collapse=".")
+      if(length(roispossible)>1){#possible for a) waters, which are also on walls, and water is given precedence
+        # and b) corners, and corners given precedence
+        #print(as.character(roispossible))
+        if(length(roispossible[grep("water",roispossible)])>0){
+          roispossible<-roispossible[grep("water",roispossible)]
+        }
+        if(length(roispossible[grep("barrier",roispossible)])==2){
+          roinam<-as.character(roispossible[1])
+          roispossible<-paste0(strsplit(roinam,"_")[[1]][1],"_central_corner")
+        }
+        if(length(roispossible[grep("corner",roispossible)])>0){
+          roispossible<-roispossible[grep("corner",roispossible)]
+        }
+        if(((length(roispossible[grep("barrier",roispossible)])>0)+(length(roispossible[grep("wall",roispossible)])))==2){
+          roispossible<-roispossible[grep("barrier",roispossible)]
+        }
+        
+      }
+      
+      #if multiple 'corner' rois possible, use the one that matches the quad identified by me, earlier in the code
+      if(length(roispossible[grep("corner",roispossible)])>1){
+        roispossible<-roispossible[grep(dfwp2[r,"quad"],roispossible)]
+        #if the above trim doesn't work, length will still be >1
+        #IN which case we take the lead quad
+        if(length(roispossible)>1){
+          dropindex<-which(roispossible==roispossible[grep(paste0("_",dfwp2[r,"quad"]),roispossible)])
+          roispossible<-roispossible[-dropindex]
+        }
+      }
+      
+      if(length(roispossible)==0){
+        roispossible<-"generalmid"
+      }
+      if(length(fullpossiblerois)==0){
+        fullpossiblerois<-"NOMATCH"
+      }
+      
+      keepnewrow<-dfwp2[r,]
+      keepnewrow$peeroi<-as.character(roispossible)
+      keepnewrow$peeroiFULL<-fullpossiblerois
+      replacindex<-replacementrowvalue[r]
+      
+      dfhold[replacindex,]<-keepnewrow
+      
+      if(r==1){
+        keepnewframe<-keepnewrow
+      } else {
+        keepnewframe<-rbind(keepnewframe,keepnewrow)
+      }
+      
+      #capture roi and quad mismatch instances, but ignore instances where the inferred location is generalmid (impossible to compare)
+      if(roispossible!="generalmid"){
+        if((dfwp2[r,"quad"]!=strsplit(as.character(roispossible),"_")[[1]][1])){
+          errorstring<-data.frame(c(inforoi2[1,c("trial","camera","day")],as.character(dfwp2[r,"quad"]),as.character(roispossible),as.character(fullpossiblerois)))
+          colnames(errorstring)[c(4:6)]<-c("ralQuad","roiID","fullmatches")
+          #print(r)
+          if(errorflag==1){
+            allerrors<-errorstring
+            errorflag<-errorflag+1
+          } else {
+            allerrors<-rbind(allerrors,errorstring)
+          }
+        }#close if testing whether the first quad component of the roi name is the same as the RAL identified pee quad
+        
+      }#close if testing whether 'generalmid'
+      
+    }
+    
+    dfhold$peeroi<-factor(dfhold$peeroi)
+    #summary(dfhold)
+  }
+  
+  if(!exists("allerrors")){
+    errorstring<-data.frame(c(inforoi[1,c("trial","camera","day")],as.character(dfwp2[1,"quad"]),as.character("moop")))
+    colnames(errorstring)[c(4:5)]<-c("ralQuad","roiID")
+    allerrors<-errorstring[0,]
+  }
+  
+  wantedlist<-list(dfhold,allerrors)
+  
+  return(wantedlist)
+  
+  
+}
+
+######renametherois
+# function that takes old rois and converts them, along with relevant infor from 'thistrial' to create new universal ROI labels
+renametherois<-function(v.of.rois,thistrial,sex.of.focal){
+  # v.of.rois  = vector of rois in original format, eg. a4_a2_barrier
+  # thistrial = subset of FullMegaInfo for this trial
+  # sex.of.focal = simply the sex (f or m) of the focal mouse in a given quad
+  
+  v2<-gsub("-","_",v.of.rois)
+  
+  hooke<-strsplit(as.character(v2),"_")
+  neighbor.vec<-unlist(lapply(hooke,function(x){
+    if(length(x)==3){
+      neighbor<-x[2]
+    } else {
+      neighbor<-""
+    }}))
+  
+  roitype.vec<-unlist(lapply(hooke,function(x){x[length(x)] }))
+  
+  neighbor.sex<-unlist(lapply(neighbor.vec,function(x){
+    if(x!=""){
+      if(any(thistrial$quad==x)){
+        bing<-as.character(thistrial[which(thistrial$quad==x),"sex"])
+      } else {
+        bing<-""
+      }
+      
+    } else {
+      bing<-""
+    }
+    return(bing)
+  }
+  )
+  )
+  
+  sexcompare<-data.frame(cbind(as.character(sex.of.focal),as.character(neighbor.sex)))
+  colnames(sexcompare)<-c("focalsex","compsex")
+  sexcompare$focalsex<-as.character(sexcompare$focalsex)
+  sexcompare$compsex<-as.character(sexcompare$compsex)
+  
+  sexcompare$sexcat<-ifelse(sexcompare$compsex=='','',
+                            ifelse(sexcompare$focalsex==sexcompare$compsex,"SS","OS"))
+  
+  neightbor2<-neighbor.vec
+  neightbor2[!is.na(match(neighbor.vec,c("a1","a2","a3","a4")))]<-""
+  addmodifier<-neightbor2
+  
+  peeishappeninghere<-paste0(sexcompare$sexcat,addmodifier,roitype.vec)
+  
+  return(peeishappeninghere)
+  
+}
+
+
+#Barplotting function, with error bars
+barplotwitherrorbars<-function(dataframe,valuecolumn,groupingvariablecolumn,secondarygroupingvariable=NA,plottingcolors,cexName=1.3){
+  library(dplyr)
+  #dataframe = dataframe to summarize, multiple observations = rows, variables = columns
+  
+  #valuecolumn = name of column from a dataframe that you want plotted, e.g. "height"
+  
+  #groupingvariablecolumn (e.g. "sex")
+  
+  #plottingcolors = vector of color values corresponding to alphabetic ording of grouping variables
+  
+  #secondarygroupingvariable = if you want a double split (e.g. Sex X Strains), this is where you define that variable
+  
+  if(!exists("cexName")){cexName=2}
+  
+  if(!is.na(secondarygroupingvariable)){
+    possiblecombos<-unique(expand.grid(dataframe[,c(groupingvariablecolumn,secondarygroupingvariable)]))
+    
+    flag<-1
+    
+    ns<-list()
+    sems<-list()
+    means<-list()
+    varnams<-list()
+    
+    types.primary<-unique(dataframe[,groupingvariablecolumn])
+    types.secondary<-unique(dataframe[,secondarygroupingvariable])
+    
+    for(r in 1:length(types.secondary)){
+      secondaryval<-types.secondary[r]
+      subseconddata<-dataframe[which(dataframe[,secondarygroupingvariable]==secondaryval),]
+      
+      for(s in 1:length(types.primary)){
+        primaryval<-types.primary[s]
+        subprim<-subseconddata[which(subseconddata[,groupingvariablecolumn]==primaryval),]
+        
+        
+        
+        
+        
+        ns[[flag]]<-nrow(subprim)
+        varnams[[flag]]<-paste(possiblecombos[flag,1],possiblecombos[flag,2],sep=".")
+        calcvalue<-na.omit(subprim[,valuecolumn])
+        #computation of the standard error of the mean
+        sems[[flag]]<-sd(calcvalue)/sqrt(length(calcvalue))
+        means[[flag]]<-mean(calcvalue)
+        
+        
+        
+        flag<-flag+1
+        
+      }
+      
+    }
+    
+    standardErrors <- unlist(sems)
+    means<-unlist(means)
+    names<-unlist(varnams)
+    samplesizes<-unlist(ns)
+    
+    plotTop <- max(means+standardErrors*2)
+    barCenters <- barplot(means, names.arg=names, col=plottingcolors, las=1, ylim=c(0,plotTop),ylab=valuecolumn,cex.names = cexName,las=2)
+    segments(barCenters, means-standardErrors*2, barCenters, means+standardErrors*2, lwd=2)
+    text(x = barCenters+.2, y= means-means*.25, label = samplesizes, pos = 3, cex = 0.8, col = "blue")
+    
+  } else {
+    #default, bar plot with single grouping variable and SEM bars
+    types<-dataframe[,groupingvariablecolumn]
+    
+    ns<-list()
+    sems<-list()
+    means<-list()
+    varnams<-list()
+    for(g in 1:nlevels(types)){
+      g2<-levels(types)[g]
+      varnams[[g]]<-g2
+      calcvalue<-na.omit(dataframe[which(dataframe[,groupingvariablecolumn]==g2),valuecolumn])
+      #computation of the standard error of the mean
+      sems[[g]]<-sd(calcvalue)/sqrt(length(calcvalue))
+      means[[g]]<-mean(calcvalue)
+      ns[[g]]<-length(calcvalue)
+    }
+    
+    standardErrors <- unlist(sems)
+    means<-unlist(means)
+    names<-unlist(varnams)
+    samplesizes<-unlist(ns)
+    
+    plotTop <- max(means+standardErrors*2)
+    barCenters <- barplot(means, names.arg=names, col=plottingcolors, las=1, ylim=c(0,plotTop),ylab=valuecolumn,cex.names = cexName)
+    segments(barCenters, means-standardErrors*2, barCenters, means+standardErrors*2, lwd=2)
+    text(x = barCenters+.2, y= means-means*.25, label = samplesizes, pos = 3, cex = 0.8, col = "blue")
+  }
+}
+
 
 
 # CreateCompositeList -----------------------------------------------------
@@ -102,7 +443,7 @@ BehaviorCategorizer<-function(Big,approach.angle=90,leave.angle=90,integratestep
   
   movingbehavior<-apply(RunMouse,2,function(x) ifelse(x<stationary.noise,"stationary",
                                                       ifelse(x>walk.speed,"running","walking")))
-  colnames(movingbehavior)<-gsub("step","movement",colnames(movingbehavior))
+  colnames(movingbehavior)<-gsub("cm/s","movement",colnames(movingbehavior))
   
   #Approaching classifier
   top.angle<-approach.angle/2
@@ -134,7 +475,8 @@ BehaviorCategorizer<-function(Big,approach.angle=90,leave.angle=90,integratestep
   for(rory in 1:orderedcomparisons){
     plusr<-rory+orderedcomparisons
     
-    approachingthismouse<-ifelse(socialmovements[,rory]==1 & socialmovements[,c(grepl(oc3[[rory]][1],colnames(socialmovements))&
+    approachingthismouse<-ifelse(socialmovements[,rory]==1 & 
+                                   socialmovements[,c(grepl(oc3[[rory]][1],colnames(socialmovements))&
                                                                                   grepl(oc3[[rory]][2],colnames(socialmovements))&
                                                                                   grepl("Delta",colnames(socialmovements)))]<0 & 
                                                                                   movingbehavior[,grepl(oc3[[rory]][1],colnames(movingbehavior))]!="stationary",1,0)
@@ -174,8 +516,10 @@ BehaviorCategorizer<-function(Big,approach.angle=90,leave.angle=90,integratestep
 # Mouse2MouseTrajectories -------------------------------------------------
 # Function that takes two columns, per individual, of x/y coordinates
 # (e.g. 4 individuals, n.inds=4, should correspond to 8 columns (xyvalues.allpairs))
-# Returns pairwise distances, orientations at each time point (i.e. whether a mouse is moving towards another) and velocities
-Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,shrinksize=.75,pix.cm=4.2924){ 
+# Returns pairwise distances, orientations at each time point 
+# (i.e. whether a mouse is moving towards another) and velocities
+Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,
+                      n.inds=4,shrinksize=.754){ 
   #xyvalues.allpairs = subset of full dataframe containing original all x,y coordinates for all
   # n.inds = number of individual mice
  
@@ -198,7 +542,7 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,shrinksize=.7
       # step vectors
       dZ1 <- (diff(Z1))
       # orientation of each step
-      distanctrav<-Mod(dZ1)/pix.cm
+      distanctrav<-Mod(dZ1)
       Z1.Phi <- Arg(dZ1)
       Compass.D.M1<-((Z1.Phi * 180)/pi)
       Compass.D.M1<-ifelse(Compass.D.M1>0,Compass.D.M1,(360+(Compass.D.M1)))
@@ -210,9 +554,10 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,shrinksize=.7
                #modulo = c("asis", "2pi", "pi"),
                zero = 0) #rotation = c("counter", "clock"), names)
       
-     nom1<-gsub("x0.","",colnames(xyvalues.allpairs)[a1])
-     rose.diag(circle.Compass.D.M1, bins = 16, col = colorlist[d], prop = 2, shrink=shrinksize,
-                main = nom1,rotation="clock")
+     nom1<-gsub(".x","",colnames(xyvalues.allpairs)[a1])
+     # rose.diag(circle.Compass.D.M1, bins = 16, col = colorlist[d], 
+     #           prop = 2, shrink=shrinksize,
+     #           main = nom1,rotation="clock")
 
       
         for(e in 1:n.inds){  #Loops through all others
@@ -222,8 +567,8 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,shrinksize=.7
           b2<-a2+1
           
           
-          comparisonheader<-paste(gsub("x0.","",colnames(xyvalues.allpairs)[a1]),
-                                  gsub("x0.","",colnames(xyvalues.allpairs)[a2]),sep=':')
+          comparisonheader<-paste(gsub(".x","",colnames(xyvalues.allpairs)[a1]),
+                                  gsub(".x","",colnames(xyvalues.allpairs)[a2]),sep=':')
           
           
           Z2=xyvalues.allpairs[,a2]+1i*xyvalues.allpairs[,b2] #Pulls locations for first individual
@@ -315,6 +660,10 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,shrinksize=.7
           
 
           flag<-flag+1
+          } else {
+            rose.diag(circle.Compass.D.M1, bins = 16, col = colorlist[d], 
+                      prop = 2, shrink=shrinksize,
+                      main = nom1,rotation="clock")
           }
         }  
       
@@ -362,13 +711,13 @@ Mouse2Mouse<-function(xyvalues.allpairs,pairwisedistances,n.inds=4,shrinksize=.7
 # pairwise.Distances ------------------------------------------------------
 #Function to calculate pairwise distances from CombinedInfo dataframes
 # *dataframeCombinedInfo* should be a df (nrows corresponding to frames), with labelled x and y coordinates 
-# (e.g. "x0.A1"    "y0.A1"    "x0.A2"    "y0.A2"    "x0.A3"    "y0.A3"    "x0.A4"    "y0.A4" )
+# (e.g. "x.a1"    "y.a1"    "x.a2"    "y.a2"    "x.a3"    "y.a3"    "x.a4"    "y.a4" )
 # *inds* should correspond to the number of individuals you are comparing
 
 
-pairwise.Distances<-function(dataframeCombinedInfo,inds=4){
+pairwise.Distances<-function(dataframeCombinedInfo,inds=4,pix.cm=4.2924){
   if(inds>1){
-  individual.names<-gsub("x0.","",colnames(dataframeCombinedInfo)[seq(2,inds*2,2)])#pulls subset of column names, corresponding to the # of inds, and uses gsub to substitute 'blank' for x0.
+  individual.names<-gsub(".x","",colnames(dataframeCombinedInfo)[seq(2,inds*2,2)])#pulls subset of column names, corresponding to the # of inds, and uses gsub to substitute 'blank' for x.
   ncomparisons<-2*(inds-1) #Calculates number of unique dyadic comparisons based on the n of individuals
   for(i in 1:(inds-1)){
     first<-dataframeCombinedInfo[,grepl(individual.names[i],colnames(dataframeCombinedInfo))]
@@ -376,6 +725,7 @@ pairwise.Distances<-function(dataframeCombinedInfo,inds=4){
     for(j in (i+1):inds){
       second<-dataframeCombinedInfo[,grepl(individual.names[j],colnames(dataframeCombinedInfo))]
       distances<-sqrt((first[,1]-second[,1])^2+(first[,2]-second[,2])^2)
+      distances<-distances/pix.cm
       secondID<-individual.names[j]
       comparisonname<-paste(firstID,secondID,"dist",sep='')
       dataframeCombinedInfo<-cbind(dataframeCombinedInfo,distances)
@@ -390,14 +740,14 @@ pairwise.Distances<-function(dataframeCombinedInfo,inds=4){
 
 # Associate.Identifier ----------------------------------------------------
 #Using the *dataframeCombinedInfo*, which should contain pairwise distance columns with "dist" in the column names
-# cheks for associations based on whether the distances are smaller than 'AssociatingDistance.pixels' threshold
+# cheks for associations based on whether the distances are smaller than 'AssociatingDistance' threshold
 
-Associate.Identifier<-function(dataframeCombinedInfo,AssociatingDistance.pixels){
+Associate.Identifier<-function(dataframeCombinedInfo,AssociatingDistance){
   associationspossible<-colnames(dataframeCombinedInfo[,grepl("dist",colnames(dataframeCombinedInfo))])
   for(r in 1:length(associationspossible)){
     ass<-associationspossible[r]
     ass.lab<-gsub("dist","",ass)
-    xyz<-ifelse(dataframeCombinedInfo[,ass]<AssociatingDistance.pixels,1,0)
+    xyz<-ifelse(dataframeCombinedInfo[,ass]<AssociatingDistance,1,0)
     dataframeCombinedInfo<-cbind(dataframeCombinedInfo,xyz)
     colnames(dataframeCombinedInfo)[ncol(dataframeCombinedInfo)]<-ass.lab
   }
@@ -406,6 +756,110 @@ Associate.Identifier<-function(dataframeCombinedInfo,AssociatingDistance.pixels)
 }
 
 
+
+####
+# Takes HugeMouse dataframe (with colnames id'd below),
+# where 'ds' represents dailysecond, where each ds is repeated 10x
+# and creates a downsampled version where each set of measures collected over each
+# of the 10 frames/second are used to generate metrics at 1 Htz
+#
+# For categorical movement states (running, walking, stationary), takes the most freq state
+# For velocity (cm/s), takes average over 10 frames/sec
+# For binary (0/1) variables, if it happens at all, take it!
+###################################################################
+# c("ds", "frame", "a1.x", "a1.y", "a2.x", "a2.y", "a3.x", "a3.y", 
+#   "a4.x", "a4.y", "a1a2dist", "a1a3dist", "a1a4dist", "a2a3dist", 
+#   "a2a4dist", "a3a4dist", "a1a2", "a1a3", "a1a4", "a2a3", "a2a4", 
+#   "a3a4", "a1step", "a2step", "a3step", "a4step", "a1-angles", 
+#   "a2-angles", "a3-angles", "a4-angles", "a1:a2-angle", "a1:a3-angle", 
+#   "a1:a4-angle", "a2:a1-angle", "a2:a3-angle", "a2:a4-angle", "a3:a1-angle", 
+#   "a3:a2-angle", "a3:a4-angle", "a4:a1-angle", "a4:a2-angle", "a4:a3-angle", 
+#   "Delta.a1a2dist", "Delta.a1a3dist", "Delta.a1a4dist", "Delta.a2a3dist", 
+#   "Delta.a2a4dist", "Delta.a3a4dist", "a1cm/s", "a2cm/s", "a3cm/s", 
+#   "a4cm/s", "a1movement", "a2movement", "a3movement", "a4movement", 
+#   "a1.app.a2", "a1.app.a3", "a1.app.a4", "a2.app.a1", "a2.app.a3", 
+#   "a2.app.a4", "a3.app.a1", "a3.app.a2", "a3.app.a4", "a4.app.a1", 
+#   "a4.app.a2", "a4.app.a3", "a1.lvs.a2", "a1.lvs.a3", "a1.lvs.a4", 
+#   "a2.lvs.a1", "a2.lvs.a3", "a2.lvs.a4", "a3.lvs.a1", "a3.lvs.a2", 
+#   "a3.lvs.a4", "a4.lvs.a1", "a4.lvs.a2", "a4.lvs.a3")
+HugeMouseDownSampler<-function(HugeMouse){
+  
+  numericcolumnstoavg<-colnames(HugeMouse)[c(grep("cm/s",colnames(HugeMouse)))]
+  numericcolumnstomax<-colnames(HugeMouse)[c(which(colnames(HugeMouse) %in% c("a1a2","a1a3","a1a4","a2a3","a2a4","a3a4")),
+                         grep(".app.",colnames(HugeMouse)),grep("lvs",colnames(HugeMouse)))]
+  
+  movcols<-colnames(HugeMouse)[grep("movement",colnames(HugeMouse))]
+  
+
+  
+  for(nca in 1:length(numericcolumnstoavg)){
+    avgspd<-HugeMouse %>%
+      group_by(ds) %>%
+        summarise_at(numericcolumnstoavg[nca], mean, na.rm = TRUE)
+    #############################
+      if(nca==1){
+        howmove<-avgspd
+      } else {
+        howmove<-merge(howmove,avgspd,by="ds")
+      }
+  }
+  
+  for(ncm in 1:length(numericcolumnstomax)){
+    maxVv<-HugeMouse %>%
+      group_by(ds) %>%
+      summarise_at(numericcolumnstomax[ncm], max, na.rm = TRUE)
+    #############################
+    howmove<-merge(howmove,maxVv,by="ds")
+    
+  }
+  
+  for(mc in 1:4){
+    howmove[,movcols[mc]]<-ifelse(howmove[,numericcolumnstoavg[mc]]>10,"running",
+                                  ifelse(howmove[,numericcolumnstoavg[mc]]>0.5,"walking","stationary"))
+  }
+  
+  howmove<-howmove[,c(1,36:39,2:35)]
+  
+  howmove<-myFun(howmove)
+  
+  howmove[,c(2:5)]<-lapply(howmove[,c(2:5)],function(x){factor(x)})
+  
+  return(howmove)
+}
+
+
+
+#-----------------------------------------------------------------------------------
+# Function that takes a vector of movement 'states' ('running','walking','stationary')
+# and returns the single value that is most represented 
+# (or, if running is tied for most represented, takes 'running' as the state), else it looks at walking
+# and last, if neither running nor walking is top (or tied for top), then the state is
+# 'stationary'
+run.walk.station<-function(t){
+  t2<-data.frame(table(t))
+  rn<-t2[which(t2$t=="running"),'Freq']
+  
+  #if most prevalent beh state is running, or tied for most prevalent, then it's running
+  if(max(t2$Freq)==rn){
+    bstate<-'running'
+  } else {
+    wk<-t2[which(t2$t=="walking"),'Freq']
+    #if most prevalent beh state is walking, then it's walking
+    if(max(t2$Freq)==wk){
+      bstate<-'walking'
+    } else {
+      bstate<-'stationary'
+    }
+  }
+  return(bstate)
+}
+
+#############
+myFun <- function(data) {
+  ListCols <- sapply(data, is.list)
+  cbind(data[!ListCols], t(apply(data[ListCols], 1, unlist)))
+}#FUNCTION TO UNLIST VARIALBES IN DF
+########################################################
 
 # add.alpha ---------------------------------------------------------------
 ## Add an alpha value to a colour
@@ -446,4 +900,57 @@ characteriseTrajectory <- function(trj) {
        min_deltaS = first_min[1],
        min_C = first_min[2]
   )
+}
+
+
+
+
+# chart.Correlation.RUSTY --------------------------------------------------
+#Modified from PerformanceAnalytics::chart.Correlation
+chart.Correlation.RUSTY<-function (R, histogram = TRUE, method = c("pearson", "kendall", 
+                                                                   "spearman"), dotcolors, ppp, logger, ...) 
+{
+  x = checkData(R, method = "matrix")
+  if (missing(method)) 
+    method = method[1]
+  cormeth <- method
+  panel.cor <- function(x, y, digits = 2, prefix = "", 
+                        use = "pairwise.complete.obs", method = cormeth, 
+                        cex.cor, ...) {
+    usr <- par("usr")
+    on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- cor(x, y, use = use, method = method)
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste(prefix, txt, sep = "")
+    if (missing(cex.cor)) 
+      cex <- 0.8/strwidth(txt)
+    test <- cor.test(as.numeric(x), as.numeric(y), method = method)
+    Signif <- symnum(test$p.value, corr = FALSE, na = FALSE, 
+                     cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1), symbols = c("***", 
+                                                                              "**", "*", ".", " "))
+    text(0.5, 0.5, txt, cex = cex * (abs(r) + 0.3)/1.3)
+    text(0.8, 0.8, Signif, cex = cex, col = 2)
+  }
+  f <- function(t) {
+    dnorm(t, mean = mean(x), sd = sd.xts(x))
+  }
+  dotargs <- list(...)
+  dotargs$method <- NULL
+  rm(method)
+  hist.panel = function(x, ... = NULL) {
+    par(new = TRUE)
+    hist(x, col = "light gray", probability = TRUE, 
+         axes = FALSE, main = "", breaks = "FD")
+    lines(density(x, na.rm = TRUE), col = "red", lwd = 1)
+    rug(x)
+  }
+  
+  if(missing(logger))
+    logger=""
+  
+  if (histogram) 
+    pairs(x, gap = 0, lower.panel = panel.smooth, upper.panel = panel.cor, 
+          diag.panel = hist.panel,col=dotcolors,pch=ppp,log=logger)
+  else pairs(x, gap = 0, lower.panel = panel.smooth, upper.panel = panel.cor,col=dotcolors,pch=ppp,log=logger)
 }
