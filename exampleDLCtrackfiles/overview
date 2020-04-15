@@ -1,0 +1,1 @@
+This folder contains the output data from DeepLabCut tracked videos, returing x/y coordinates for each mouse at the frame rate of the video (10Htz)
